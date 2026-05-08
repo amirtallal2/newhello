@@ -68,6 +68,7 @@ admin_render_header('إدارة المستخدمين', 'users');
         <thead>
             <tr>
                 <th>ID</th>
+                <th>الصورة</th>
                 <th>الاسم</th>
                 <th>البريد</th>
                 <th>الهاتف</th>
@@ -81,6 +82,7 @@ admin_render_header('إدارة المستخدمين', 'users');
         <?php foreach ($users as $user): ?>
             <tr>
                 <td>#<?= (int) $user['id'] ?></td>
+                <td><?= admin_render_media_preview((string) ($user['avatar_asset'] ?? ''), (string) ($user['nickname'] ?: 'avatar')) ?></td>
                 <td><a href="/admin/user.php?id=<?= (int) $user['id'] ?>"><?= htmlspecialchars((string) ($user['nickname'] ?: 'بدون اسم')) ?></a></td>
                 <td><?= htmlspecialchars((string) ($user['email'] ?: '-')) ?></td>
                 <td><?= htmlspecialchars((string) ($user['phone'] ?: '-')) ?></td>

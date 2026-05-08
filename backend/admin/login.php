@@ -32,9 +32,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body class="login-page">
     <div class="login-card">
         <div class="brand login-brand">
-            <div class="brand-badge">VL</div>
+            <div class="brand-badge">
+                <img class="brand-logo-image" src="<?= htmlspecialchars(admin_brand_logo_url(), ENT_QUOTES) ?>" alt="<?= htmlspecialchars(admin_brand_name(), ENT_QUOTES) ?>">
+            </div>
             <div>
-                <div class="brand-title">Voice Live</div>
+                <div class="brand-title"><?= htmlspecialchars(admin_brand_name()) ?></div>
                 <div class="brand-subtitle">Admin Panel</div>
             </div>
         </div>

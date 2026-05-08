@@ -3,6 +3,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../../../core/widgets/resolved_image.dart';
+import '../../data/profile_economy_repository.dart';
+import 'profile_store_send_frame_screen.dart';
 import '../../../home/presentation/widgets/main_bottom_navigation.dart';
 
 class ProfileStoreEntryEffectsScreen extends StatefulWidget {
@@ -19,72 +22,37 @@ class ProfileStoreEntryEffectsScreen extends StatefulWidget {
 
 class _ProfileStoreEntryEffectsScreenState
     extends State<ProfileStoreEntryEffectsScreen> {
-  static const List<_EntryEffectStoreItemData> _items = [
-    _EntryEffectStoreItemData(
-      name: 'الاطار المتحرك السريع',
-      previewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_item.png',
-      dialogIconAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_icon.png',
-      dialogPreviewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_preview.png',
-    ),
-    _EntryEffectStoreItemData(
-      name: 'الاطار المتحرك السريع',
-      previewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_item.png',
-      dialogIconAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_icon.png',
-      dialogPreviewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_preview.png',
-    ),
-    _EntryEffectStoreItemData(
-      name: 'الاطار المتحرك السريع',
-      previewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_item.png',
-      dialogIconAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_icon.png',
-      dialogPreviewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_preview.png',
-    ),
-    _EntryEffectStoreItemData(
-      name: 'الاطار المتحرك السريع',
-      previewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_item.png',
-      dialogIconAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_icon.png',
-      dialogPreviewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_preview.png',
-    ),
-    _EntryEffectStoreItemData(
-      name: 'الاطار المتحرك السريع',
-      previewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_item.png',
-      dialogIconAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_icon.png',
-      dialogPreviewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_preview.png',
-    ),
-    _EntryEffectStoreItemData(
-      name: 'الاطار المتحرك السريع',
-      previewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_item.png',
-      dialogIconAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_icon.png',
-      dialogPreviewAssetPath:
-          'assets/images/profile_store_entry_effects_fast_frame_dialog_preview.png',
-    ),
-  ];
+  final ProfileEconomyRepository _economyRepository =
+      ProfileEconomyRepository.instance;
+  List<StoreItemData> _items = const <StoreItemData>[];
 
-  static const List<_EntryEffectPurchaseDurationData> _durations = [
-    _EntryEffectPurchaseDurationData(label: '3 ايام', discount: '10% Off'),
-    _EntryEffectPurchaseDurationData(label: '7 ايام', discount: '22% Off'),
-    _EntryEffectPurchaseDurationData(label: '15 ايام', discount: '27% Off'),
-    _EntryEffectPurchaseDurationData(label: '30 ايام', discount: '27% Off'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
 
-  Future<void> _showPurchaseDialog(_EntryEffectStoreItemData item) {
-    var selectedDurationIndex = 0;
+  Future<void> _loadCatalog() async {
+    try {
+      final catalog = await _economyRepository.loadStoreCatalog(
+        categoryKey: 'entry_effects',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _items = catalog.items;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _showPurchaseDialog(StoreItemData item) {
+    var selectedDurationIndex = item.durations.indexWhere(
+      (duration) => duration.days == item.defaultDurationDays,
+    );
+    if (selectedDurationIndex < 0) {
+      selectedDurationIndex = 0;
+    }
 
     return showGeneralDialog<void>(
       context: context,
@@ -94,6 +62,12 @@ class _ProfileStoreEntryEffectsScreenState
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final durations = item.durations;
+            final selectedDuration = durations[selectedDurationIndex];
+            final dialogIconAssetPath =
+                item.dialogIconAssetPath ?? item.previewAssetPath;
+            final dialogPreviewAssetPath =
+                item.dialogPreviewAssetPath ?? item.previewAssetPath;
             return Stack(
               children: [
                 Positioned.fill(
@@ -132,10 +106,11 @@ class _ProfileStoreEntryEffectsScreenState
                                 children: [
                                   Align(
                                     alignment: Alignment.centerLeft,
-                                    child: Image.asset(
-                                      item.dialogIconAssetPath,
+                                    child: ResolvedImage(
+                                      path: dialogIconAssetPath,
                                       width: 50,
                                       height: 50,
+                                      fit: BoxFit.contain,
                                       filterQuality: FilterQuality.high,
                                     ),
                                   ),
@@ -152,8 +127,8 @@ class _ProfileStoreEntryEffectsScreenState
                               ),
                             ),
                             const SizedBox(height: 8),
-                            Image.asset(
-                              item.dialogPreviewAssetPath,
+                            ResolvedImage(
+                              path: dialogPreviewAssetPath,
                               width: 200,
                               height: 200,
                               fit: BoxFit.contain,
@@ -164,7 +139,10 @@ class _ProfileStoreEntryEffectsScreenState
                               children: [
                                 Expanded(
                                   child: _EntryEffectDurationOptionButton(
-                                    data: _durations[2],
+                                    data:
+                                        _EntryEffectPurchaseDurationData.fromDuration(
+                                          durations[2],
+                                        ),
                                     isSelected: selectedDurationIndex == 2,
                                     onTap: () {
                                       setDialogState(() {
@@ -176,7 +154,10 @@ class _ProfileStoreEntryEffectsScreenState
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _EntryEffectDurationOptionButton(
-                                    data: _durations[1],
+                                    data:
+                                        _EntryEffectPurchaseDurationData.fromDuration(
+                                          durations[1],
+                                        ),
                                     isSelected: selectedDurationIndex == 1,
                                     onTap: () {
                                       setDialogState(() {
@@ -188,7 +169,10 @@ class _ProfileStoreEntryEffectsScreenState
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _EntryEffectDurationOptionButton(
-                                    data: _durations[0],
+                                    data:
+                                        _EntryEffectPurchaseDurationData.fromDuration(
+                                          durations[0],
+                                        ),
                                     isSelected: selectedDurationIndex == 0,
                                     onTap: () {
                                       setDialogState(() {
@@ -205,7 +189,10 @@ class _ProfileStoreEntryEffectsScreenState
                               child: SizedBox(
                                 width: 84,
                                 child: _EntryEffectDurationOptionButton(
-                                  data: _durations[3],
+                                  data:
+                                      _EntryEffectPurchaseDurationData.fromDuration(
+                                        durations[3],
+                                      ),
                                   isSelected: selectedDurationIndex == 3,
                                   onTap: () {
                                     setDialogState(() {
@@ -216,9 +203,9 @@ class _ProfileStoreEntryEffectsScreenState
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'الاسعار : 1890',
-                              style: TextStyle(
+                            Text(
+                              'الاسعار : ${selectedDuration.price}',
+                              style: const TextStyle(
                                 color:
                                     ProfileStoreEntryEffectsScreen._primaryBlue,
                                 fontSize: 10,
@@ -233,8 +220,33 @@ class _ProfileStoreEntryEffectsScreenState
                                 key: const ValueKey(
                                   'profile-store-entry-effects-dialog-buy',
                                 ),
-                                onPressed: () {
-                                  Navigator.of(dialogContext).pop();
+                                onPressed: () async {
+                                  final navigator = Navigator.of(dialogContext);
+                                  final messenger = ScaffoldMessenger.of(
+                                    this.context,
+                                  );
+                                  try {
+                                    await _economyRepository.purchaseStoreItem(
+                                      itemId: item.id,
+                                      durationDays: selectedDuration.days,
+                                    );
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    navigator.pop();
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text('تم شراء العنصر بنجاح'),
+                                      ),
+                                    );
+                                  } catch (error) {
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text(error.toString())),
+                                    );
+                                  }
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
@@ -323,49 +335,67 @@ class _ProfileStoreEntryEffectsScreenState
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(17, 10, 17, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: EdgeInsets.only(right: 1, bottom: 11),
-                        child: Text(
-                          'جديد',
-                          style: TextStyle(
-                            color: ProfileStoreEntryEffectsScreen._primaryBlue,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
+              child: RefreshIndicator(
+                color: ProfileStoreEntryEffectsScreen._primaryBlue,
+                onRefresh: _loadCatalog,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(17, 10, 17, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(right: 1, bottom: 11),
+                          child: Text(
+                            'جديد',
+                            style: TextStyle(
+                              color:
+                                  ProfileStoreEntryEffectsScreen._primaryBlue,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        const spacing = 20.0;
-                        final cardWidth = (constraints.maxWidth - spacing) / 2;
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          const spacing = 20.0;
+                          final cardWidth =
+                              (constraints.maxWidth - spacing) / 2;
 
-                        return Wrap(
-                          spacing: spacing,
-                          runSpacing: 20,
-                          children: List.generate(_items.length, (index) {
-                            return SizedBox(
-                              width: cardWidth,
-                              child: _EntryEffectStoreItemCard(
-                                index: index,
-                                item: _items[index],
-                                onBuyTap: () {
-                                  _showPurchaseDialog(_items[index]);
-                                },
-                              ),
-                            );
-                          }),
-                        );
-                      },
-                    ),
-                  ],
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: 20,
+                            children: List.generate(_items.length, (index) {
+                              return SizedBox(
+                                width: cardWidth,
+                                child: _EntryEffectStoreItemCard(
+                                  index: index,
+                                  item: _items[index],
+                                  onGiftTap: () {
+                                    Navigator.of(context).pushNamed(
+                                      AppRoutes.profileStoreSendFrame,
+                                      arguments: ProfileStoreSendArgs(
+                                        itemId: _items[index].id,
+                                        itemName: _items[index].name,
+                                        durationDays:
+                                            _items[index].defaultDuration.days,
+                                      ),
+                                    );
+                                  },
+                                  onBuyTap: () {
+                                    _showPurchaseDialog(_items[index]);
+                                  },
+                                ),
+                              );
+                            }),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -383,11 +413,13 @@ class _EntryEffectStoreItemCard extends StatelessWidget {
   const _EntryEffectStoreItemCard({
     required this.index,
     required this.item,
+    required this.onGiftTap,
     required this.onBuyTap,
   });
 
   final int index;
-  final _EntryEffectStoreItemData item;
+  final StoreItemData item;
+  final VoidCallback onGiftTap;
   final VoidCallback onBuyTap;
 
   @override
@@ -418,9 +450,9 @@ class _EntryEffectStoreItemCard extends StatelessWidget {
                 filterQuality: FilterQuality.high,
               ),
               const SizedBox(width: 9),
-              const Text(
-                '7 أيام',
-                style: TextStyle(
+              Text(
+                '${item.defaultDuration.days} أيام',
+                style: const TextStyle(
                   color: ProfileStoreEntryEffectsScreen._primaryBlue,
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
@@ -429,8 +461,8 @@ class _EntryEffectStoreItemCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Image.asset(
-            item.previewAssetPath,
+          ResolvedImage(
+            path: item.previewAssetPath,
             width: 100,
             height: 100,
             fit: BoxFit.contain,
@@ -444,11 +476,7 @@ class _EntryEffectStoreItemCard extends StatelessWidget {
                   label: 'ارسال',
                   backgroundColor:
                       ProfileStoreEntryEffectsScreen._secondaryBlue,
-                  onTap: () {
-                    Navigator.of(
-                      context,
-                    ).pushNamed(AppRoutes.profileStoreSendFrame);
-                  },
+                  onTap: onGiftTap,
                 ),
               ),
               const SizedBox(width: 15),
@@ -594,20 +622,6 @@ class _EntryEffectDurationOptionButton extends StatelessWidget {
   }
 }
 
-class _EntryEffectStoreItemData {
-  const _EntryEffectStoreItemData({
-    required this.name,
-    required this.previewAssetPath,
-    required this.dialogIconAssetPath,
-    required this.dialogPreviewAssetPath,
-  });
-
-  final String name;
-  final String previewAssetPath;
-  final String dialogIconAssetPath;
-  final String dialogPreviewAssetPath;
-}
-
 class _EntryEffectPurchaseDurationData {
   const _EntryEffectPurchaseDurationData({
     required this.label,
@@ -616,4 +630,13 @@ class _EntryEffectPurchaseDurationData {
 
   final String label;
   final String discount;
+
+  factory _EntryEffectPurchaseDurationData.fromDuration(
+    StoreDurationOptionData duration,
+  ) {
+    return _EntryEffectPurchaseDurationData(
+      label: '${duration.days} ايام',
+      discount: duration.discount,
+    );
+  }
 }

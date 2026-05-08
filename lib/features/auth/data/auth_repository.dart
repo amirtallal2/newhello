@@ -5,6 +5,8 @@ import 'auth_flow_store.dart';
 abstract class AuthRepository {
   static AuthRepository instance = LiveAuthRepository();
 
+  Future<bool> restoreSession();
+
   Future<void> signUp({required String email, required String password});
 
   Future<String?> resendEmailVerification();
@@ -31,6 +33,11 @@ abstract class AuthRepository {
     required String password,
   });
 
+  Future<void> loginWithGoogle({
+    required String idToken,
+    String? serverAuthCode,
+  });
+
   Future<String?> requestPasswordReset(String email);
 
   Future<void> resetPassword({
@@ -44,6 +51,29 @@ final class LiveAuthRepository implements AuthRepository {
   final AuthFlowStore _store = AuthFlowStore.instance;
 
   @override
+  Future<bool> restoreSession() async {
+    if (!_store.hasActiveSession) {
+      return false;
+    }
+
+    try {
+      final response = await _client.get(
+        '/auth/me',
+        bearerToken: _store.authToken,
+      );
+      final data = response['data'] as Map<String, dynamic>;
+      await _store.saveAuthSession(
+        token: _store.authToken!,
+        user: Map<String, dynamic>.from(data),
+      );
+      return true;
+    } catch (_) {
+      await _store.clearSession();
+      return false;
+    }
+  }
+
+  @override
   Future<void> signUp({required String email, required String password}) async {
     final response = await _client.post(
       '/auth/register',
@@ -51,7 +81,7 @@ final class LiveAuthRepository implements AuthRepository {
     );
 
     final data = response['data'] as Map<String, dynamic>;
-    _store.savePendingRegistration(
+    await _store.savePendingRegistration(
       registrationToken: data['registration_token'].toString(),
       email: data['email'].toString(),
       maskedEmail: data['email_masked'].toString(),
@@ -117,7 +147,7 @@ final class LiveAuthRepository implements AuthRepository {
     );
 
     final data = response['data'] as Map<String, dynamic>;
-    _store.savePendingPhoneOtp(
+    await _store.savePendingPhoneOtp(
       phone: data['phone'].toString(),
       otp: data['debug_phone_otp']?.toString() ?? '',
     );
@@ -138,11 +168,11 @@ final class LiveAuthRepository implements AuthRepository {
     );
 
     final data = response['data'] as Map<String, dynamic>;
-    _store.saveAuthSession(
+    await _store.saveAuthSession(
       token: data['token'].toString(),
       user: Map<String, dynamic>.from(data['user'] as Map),
     );
-    _store.clearPendingRegistration();
+    await _store.clearPendingRegistration();
   }
 
   @override
@@ -156,7 +186,7 @@ final class LiveAuthRepository implements AuthRepository {
     );
 
     final data = response['data'] as Map<String, dynamic>;
-    _store.saveAuthSession(
+    await _store.saveAuthSession(
       token: data['token'].toString(),
       user: Map<String, dynamic>.from(data['user'] as Map),
     );
@@ -173,7 +203,24 @@ final class LiveAuthRepository implements AuthRepository {
     );
 
     final data = response['data'] as Map<String, dynamic>;
-    _store.saveAuthSession(
+    await _store.saveAuthSession(
+      token: data['token'].toString(),
+      user: Map<String, dynamic>.from(data['user'] as Map),
+    );
+  }
+
+  @override
+  Future<void> loginWithGoogle({
+    required String idToken,
+    String? serverAuthCode,
+  }) async {
+    final response = await _client.post(
+      '/auth/login/google',
+      body: {'id_token': idToken, 'server_auth_code': serverAuthCode},
+    );
+
+    final data = response['data'] as Map<String, dynamic>;
+    await _store.saveAuthSession(
       token: data['token'].toString(),
       user: Map<String, dynamic>.from(data['user'] as Map),
     );
@@ -192,7 +239,7 @@ final class LiveAuthRepository implements AuthRepository {
       throw ApiException('No reset token returned from server.');
     }
 
-    _store.savePasswordReset(
+    await _store.savePasswordReset(
       token: resetToken,
       maskedEmail: data['email_masked']?.toString() ?? email,
       resetCode: data['debug_reset_code']?.toString(),
@@ -220,7 +267,7 @@ final class LiveAuthRepository implements AuthRepository {
       },
     );
 
-    _store.clearPasswordReset();
+    await _store.clearPasswordReset();
   }
 }
 
@@ -228,8 +275,11 @@ final class FakeAuthRepository implements AuthRepository {
   final AuthFlowStore _store = AuthFlowStore.instance;
 
   @override
+  Future<bool> restoreSession() async => _store.hasActiveSession;
+
+  @override
   Future<void> signUp({required String email, required String password}) async {
-    _store.savePendingRegistration(
+    await _store.savePendingRegistration(
       registrationToken: 'test-registration-token',
       email: email,
       maskedEmail:
@@ -252,13 +302,13 @@ final class FakeAuthRepository implements AuthRepository {
     required String gender,
     required String country,
   }) async {
-    _store.savePendingPhoneOtp(phone: phone, otp: '52678');
+    await _store.savePendingPhoneOtp(phone: phone, otp: '52678');
     return '52678';
   }
 
   @override
   Future<void> verifyPhoneOtp(String otp) async {
-    _store.saveAuthSession(
+    await _store.saveAuthSession(
       token: 'fake-auth-token',
       user: {
         'id': 1,
@@ -267,7 +317,7 @@ final class FakeAuthRepository implements AuthRepository {
         'nickname': 'Tester',
       },
     );
-    _store.clearPendingRegistration();
+    await _store.clearPendingRegistration();
   }
 
   @override
@@ -275,7 +325,10 @@ final class FakeAuthRepository implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    _store.saveAuthSession(token: 'fake-auth-token', user: {'email': email});
+    await _store.saveAuthSession(
+      token: 'fake-auth-token',
+      user: {'email': email},
+    );
   }
 
   @override
@@ -283,12 +336,30 @@ final class FakeAuthRepository implements AuthRepository {
     required String phone,
     required String password,
   }) async {
-    _store.saveAuthSession(token: 'fake-auth-token', user: {'phone': phone});
+    await _store.saveAuthSession(
+      token: 'fake-auth-token',
+      user: {'phone': phone},
+    );
+  }
+
+  @override
+  Future<void> loginWithGoogle({
+    required String idToken,
+    String? serverAuthCode,
+  }) async {
+    await _store.saveAuthSession(
+      token: 'fake-google-auth-token',
+      user: {
+        'email': 'google@example.com',
+        'nickname': 'Google User',
+        'auth_provider': 'google',
+      },
+    );
   }
 
   @override
   Future<String?> requestPasswordReset(String email) async {
-    _store.savePasswordReset(
+    await _store.savePasswordReset(
       token: 'fake-reset-token',
       maskedEmail: email,
       resetCode: '99999',

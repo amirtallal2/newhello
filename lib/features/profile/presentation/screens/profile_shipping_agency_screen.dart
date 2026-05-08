@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../../../core/layout/responsive.dart';
+import '../../data/profile_support_repository.dart';
 
 class ProfileShippingAgencyScreen extends StatefulWidget {
   const ProfileShippingAgencyScreen({super.key});
@@ -16,46 +20,20 @@ class _ProfileShippingAgencyScreenState
   static const Color _handleGold = Color(0xFFFFAE00);
   static const Color _amountGrey = Color(0xFF8E8E93);
 
-  static const List<_ShippingAgencyData> _allAgencies = [
-    _ShippingAgencyData(
-      name: 'Mohamed Ahmed',
-      handle: '@ ابو احمد',
-      amount: '30.5M',
-      supportedCountriesCount: 7,
-      supportedFlags: [_FlagType.austria, _FlagType.azerbaijan, _FlagType.uae],
-    ),
-    _ShippingAgencyData(
-      name: 'Mohamed Ahmed',
-      handle: '@ ابو احمد',
-      amount: '30.5M',
-      supportedCountriesCount: 7,
-      supportedFlags: [_FlagType.austria, _FlagType.azerbaijan, _FlagType.uae],
-    ),
-    _ShippingAgencyData(
-      name: 'Mohamed Ahmed',
-      handle: '@ ابو احمد',
-      amount: '30.5M',
-      supportedCountriesCount: 7,
-      supportedFlags: [_FlagType.austria, _FlagType.azerbaijan, _FlagType.uae],
-    ),
-    _ShippingAgencyData(
-      name: 'Mohamed Ahmed',
-      handle: '@ ابو احمد',
-      amount: '30.5M',
-      supportedCountriesCount: 7,
-      supportedFlags: [_FlagType.austria, _FlagType.azerbaijan, _FlagType.uae],
-    ),
-    _ShippingAgencyData(
-      name: 'Mohamed Ahmed',
-      handle: '@ ابو احمد',
-      amount: '30.5M',
-      supportedCountriesCount: 7,
-      supportedFlags: [_FlagType.austria, _FlagType.azerbaijan, _FlagType.uae],
-    ),
-  ];
-
+  final ProfileSupportRepository _repository =
+      ProfileSupportRepository.instance;
   final TextEditingController _searchController = TextEditingController();
+
+  List<ShippingAgencyData> _agencies = const <ShippingAgencyData>[];
+  bool _isLoading = true;
+  String? _errorMessage;
   String _submittedQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAgencies();
+  }
 
   @override
   void dispose() {
@@ -65,14 +43,7 @@ class _ProfileShippingAgencyScreenState
 
   @override
   Widget build(BuildContext context) {
-    final query = _submittedQuery.trim().toLowerCase();
-    final agencies = query.isEmpty
-        ? _allAgencies
-        : _allAgencies.where((agency) {
-            final combined = '${agency.name} ${agency.handle} ${agency.amount}'
-                .toLowerCase();
-            return combined.contains(query);
-          }).toList();
+    final metrics = ResponsiveMetrics.of(context);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -85,7 +56,12 @@ class _ProfileShippingAgencyScreenState
             children: [
               Container(
                 color: Colors.white,
-                padding: const EdgeInsets.fromLTRB(20, 60, 20, 14),
+                padding: EdgeInsets.fromLTRB(
+                  metrics.pageHorizontalPadding(compact: 14, regular: 20),
+                  metrics.spacing(60, min: 42, max: 64),
+                  metrics.pageHorizontalPadding(compact: 14, regular: 20),
+                  metrics.spacing(14, min: 12, max: 16),
+                ),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -100,8 +76,8 @@ class _ProfileShippingAgencyScreenState
                           },
                           borderRadius: BorderRadius.circular(19),
                           child: Container(
-                            width: 38,
-                            height: 38,
+                            width: metrics.spacing(38, min: 34, max: 42),
+                            height: metrics.spacing(38, min: 34, max: 42),
                             decoration: const BoxDecoration(
                               color: Color(0xFFB4D1EF),
                               shape: BoxShape.circle,
@@ -116,11 +92,11 @@ class _ProfileShippingAgencyScreenState
                         ),
                       ),
                     ),
-                    const Text(
+                    Text(
                       'وكالة الشحن',
                       style: TextStyle(
                         color: Colors.black,
-                        fontSize: 20,
+                        fontSize: metrics.font(20, min: 18, max: 22),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -128,77 +104,126 @@ class _ProfileShippingAgencyScreenState
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(21, 0, 21, 15),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 87,
-                      height: 52,
-                      child: ElevatedButton(
-                        key: const ValueKey('profile-shipping-agency-search'),
-                        onPressed: _submitSearch,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _surfaceGrey,
-                          foregroundColor: _primaryBlue,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                padding: EdgeInsets.fromLTRB(
+                  metrics.pageHorizontalPadding(compact: 14, regular: 21),
+                  0,
+                  metrics.pageHorizontalPadding(compact: 14, regular: 21),
+                  metrics.spacing(15, min: 12, max: 16),
+                ),
+                child: ResponsiveContent(
+                  maxWidth: 500,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: metrics.spacing(87, min: 74, max: 92),
+                        height: metrics.spacing(52, min: 48, max: 54),
+                        child: ElevatedButton(
+                          key: const ValueKey('profile-shipping-agency-search'),
+                          onPressed: _submitSearch,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _surfaceGrey,
+                            foregroundColor: _primaryBlue,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                        ),
-                        child: const Text(
-                          'بحث',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Container(
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: _surfaceGrey,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        alignment: Alignment.center,
-                        child: TextField(
-                          key: const ValueKey('profile-shipping-agency-field'),
-                          controller: _searchController,
-                          textAlign: TextAlign.right,
-                          textDirection: TextDirection.rtl,
-                          decoration: const InputDecoration(
-                            hintText: 'ادخل معرف المستخدم او معرف خاص',
-                            hintStyle: TextStyle(
-                              color: _mutedGrey,
-                              fontSize: 10,
+                          child: Text(
+                            'بحث',
+                            style: TextStyle(
+                              fontSize: metrics.font(15, min: 13, max: 16),
                               fontWeight: FontWeight.w700,
                             ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 16,
-                            ),
                           ),
-                          style: const TextStyle(
-                            color: _primaryBlue,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          onSubmitted: (_) {
-                            _submitSearch();
-                          },
                         ),
                       ),
-                    ),
-                  ],
+                      SizedBox(width: metrics.spacing(9, min: 8, max: 10)),
+                      Expanded(
+                        child: Container(
+                          height: metrics.spacing(52, min: 48, max: 54),
+                          decoration: BoxDecoration(
+                            color: _surfaceGrey,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          alignment: Alignment.center,
+                          child: TextField(
+                            key: const ValueKey(
+                              'profile-shipping-agency-field',
+                            ),
+                            controller: _searchController,
+                            textAlign: TextAlign.right,
+                            textDirection: TextDirection.rtl,
+                            decoration: const InputDecoration(
+                              hintText: 'ادخل معرف المستخدم او معرف خاص',
+                              hintStyle: TextStyle(
+                                color: _mutedGrey,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                            ),
+                            style: const TextStyle(
+                              color: _primaryBlue,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            onSubmitted: (_) {
+                              _submitSearch();
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Expanded(
-                child: agencies.isEmpty
-                    ? const Center(
-                        child: Text(
+                child: Builder(
+                  builder: (context) {
+                    if (_isLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (_errorMessage != null) {
+                      return _RefreshableShippingMessage(
+                        onRefresh: _loadAgencies,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: _primaryBlue,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton(
+                                onPressed: _loadAgencies,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _primaryBlue,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('إعادة المحاولة'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (_agencies.isEmpty) {
+                      return _RefreshableShippingMessage(
+                        onRefresh: _loadAgencies,
+                        child: const Text(
                           'لا توجد نتائج',
                           style: TextStyle(
                             color: _primaryBlue,
@@ -206,18 +231,32 @@ class _ProfileShippingAgencyScreenState
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      )
-                    : ListView.separated(
-                        padding: EdgeInsets.zero,
-                        itemCount: agencies.length,
+                      );
+                    }
+
+                    return RefreshIndicator(
+                      color: _primaryBlue,
+                      onRefresh: _loadAgencies,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: metrics.pageHorizontalPadding(
+                            compact: 10,
+                            regular: 16,
+                          ),
+                        ),
+                        itemCount: _agencies.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 1),
                         itemBuilder: (context, index) {
                           return _ShippingAgencyCard(
-                            agency: agencies[index],
+                            agency: _agencies[index],
                             index: index,
                           );
                         },
                       ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -226,146 +265,373 @@ class _ProfileShippingAgencyScreenState
     );
   }
 
+  Future<void> _loadAgencies() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final agencies = await _repository.listShippingAgencies(
+        query: _submittedQuery,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _agencies = agencies;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   void _submitSearch() {
     setState(() {
       _submittedQuery = _searchController.text;
     });
+    _loadAgencies();
+  }
+}
+
+class _RefreshableShippingMessage extends StatelessWidget {
+  const _RefreshableShippingMessage({
+    required this.child,
+    required this.onRefresh,
+  });
+
+  final Widget child;
+  final RefreshCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      color: _ProfileShippingAgencyScreenState._primaryBlue,
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.45,
+            child: Center(child: child),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 class _ShippingAgencyCard extends StatelessWidget {
   const _ShippingAgencyCard({required this.agency, required this.index});
 
-  final _ShippingAgencyData agency;
+  final ShippingAgencyData agency;
   final int index;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: ValueKey('profile-shipping-agency-card-$index'),
-      color: _ProfileShippingAgencyScreenState._surfaceGrey,
-      padding: const EdgeInsets.fromLTRB(19, 11, 19, 8),
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final metrics = ResponsiveMetrics.of(context);
+    final supportedFlags = agency.supportedCountryCodes
+        .map(_flagFromCountryCode)
+        .whereType<_FlagType>()
+        .take(3)
+        .toList();
+
+    return Semantics(
+      label: 'profile-shipping-agency-card-$index',
+      button: true,
+      child: InkWell(
+        onTap: () => _showAgencyActions(context, agency),
+        child: Container(
+          key: ValueKey('profile-shipping-agency-card-$index'),
+          color: _ProfileShippingAgencyScreenState._surfaceGrey,
+          padding: EdgeInsets.fromLTRB(
+            metrics.spacing(19, min: 14, max: 20),
+            metrics.spacing(11, min: 10, max: 12),
+            metrics.spacing(19, min: 14, max: 20),
+            metrics.spacing(8, min: 8, max: 10),
+          ),
+          child: Column(
             children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: const Color(0xFFD7E5F6),
-                child: Text(
-                  agency.name.characters.first,
-                  style: const TextStyle(
-                    color: _ProfileShippingAgencyScreenState._primaryBlue,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: metrics.spacing(26, min: 22, max: 28),
+                    backgroundColor: const Color(0xFFD7E5F6),
+                    child: Text(
+                      agency.name.characters.first,
+                      style: TextStyle(
+                        color: _ProfileShippingAgencyScreenState._primaryBlue,
+                        fontSize: metrics.font(22, min: 18, max: 22),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
+                  SizedBox(width: metrics.spacing(10, min: 8, max: 12)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          agency.name,
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: metrics.font(16, min: 14, max: 17),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: metrics.spacing(4, min: 3, max: 5)),
+                        Text(
+                          agency.handle,
+                          style: TextStyle(
+                            color:
+                                _ProfileShippingAgencyScreenState._handleGold,
+                            fontSize: metrics.font(14, min: 12, max: 15),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: metrics.spacing(8, min: 6, max: 8)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        agency.diamondBalanceLabel,
+                        style: TextStyle(
+                          color: _ProfileShippingAgencyScreenState._amountGrey,
+                          fontSize: metrics.font(14, min: 12, max: 15),
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      SizedBox(width: metrics.spacing(4, min: 2, max: 4)),
+                      Image.asset(
+                        'assets/images/profile_wallet_diamond_small.png',
+                        width: metrics.spacing(25, min: 22, max: 26),
+                        height: metrics.spacing(25, min: 22, max: 26),
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              SizedBox(height: metrics.spacing(10, min: 8, max: 10)),
+              Container(
+                width: double.infinity,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(5),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      agency.name,
-                      style: const TextStyle(
+              SizedBox(height: metrics.spacing(8, min: 6, max: 8)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'الدول المدعومة للتداول',
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
                         color: Colors.black,
-                        fontSize: 16,
+                        fontSize: metrics.font(10, min: 9, max: 11),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      agency.handle,
-                      style: const TextStyle(
-                        color: _ProfileShippingAgencyScreenState._handleGold,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
+                  ),
+                  SizedBox(width: metrics.spacing(8, min: 6, max: 10)),
+                  Flexible(
+                    child: Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Wrap(
+                        spacing: metrics.spacing(6, min: 4, max: 6),
+                        runSpacing: metrics.spacing(4, min: 3, max: 4),
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            '>',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: metrics.font(10, min: 9, max: 11),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '${agency.supportedCountriesCount}',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: metrics.font(10, min: 9, max: 11),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          ...supportedFlags.map(
+                            (flag) => _FlagBadge(flag: flag),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    agency.amount,
-                    style: const TextStyle(
-                      color: _ProfileShippingAgencyScreenState._amountGrey,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Image.asset(
-                    'assets/images/profile_wallet_diamond_small.png',
-                    width: 25,
-                    height: 25,
-                    filterQuality: FilterQuality.high,
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            height: 2,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(5),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAgencyActions(
+    BuildContext context,
+    ShippingAgencyData agency,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD7E5F6),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    agency.name,
+                    style: const TextStyle(
+                      color: _ProfileShippingAgencyScreenState._primaryBlue,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    agency.handle,
+                    style: const TextStyle(
+                      color: _ProfileShippingAgencyScreenState._handleGold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _ShippingActionTile(
+                    icon: Icons.copy_rounded,
+                    label: 'نسخ معرف الوكالة',
+                    onTap: () {
+                      _copyAndClose(
+                        context,
+                        sheetContext,
+                        agency.handle,
+                        'تم نسخ معرف الوكالة',
+                      );
+                    },
+                  ),
+                  _ShippingActionTile(
+                    icon: Icons.badge_rounded,
+                    label: 'نسخ اسم الوكالة',
+                    onTap: () {
+                      _copyAndClose(
+                        context,
+                        sheetContext,
+                        agency.name,
+                        'تم نسخ اسم الوكالة',
+                      );
+                    },
+                  ),
+                  _ShippingActionTile(
+                    icon: Icons.public_rounded,
+                    label: 'الدول المدعومة: ${agency.supportedCountriesCount}',
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Row(
-                  children: [
-                    const Text(
-                      '>',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      '${agency.supportedCountriesCount}',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    ...agency.supportedFlags.map(
-                      (flag) => Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: _FlagBadge(flag: flag),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              const Text(
-                'الدول المدعومة للتداول',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ],
+        );
+      },
+    );
+  }
+
+  Future<void> _copyAndClose(
+    BuildContext context,
+    BuildContext sheetContext,
+    String value,
+    String message,
+  ) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (sheetContext.mounted) {
+      Navigator.of(sheetContext).pop();
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+}
+
+class _ShippingActionTile extends StatelessWidget {
+  const _ShippingActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        icon,
+        color: _ProfileShippingAgencyScreenState._primaryBlue,
       ),
+      title: Text(
+        label,
+        style: const TextStyle(
+          color: _ProfileShippingAgencyScreenState._primaryBlue,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      onTap: onTap,
     );
   }
 }
@@ -431,20 +697,13 @@ class _FlagBadge extends StatelessWidget {
   }
 }
 
-class _ShippingAgencyData {
-  const _ShippingAgencyData({
-    required this.name,
-    required this.handle,
-    required this.amount,
-    required this.supportedCountriesCount,
-    required this.supportedFlags,
-  });
-
-  final String name;
-  final String handle;
-  final String amount;
-  final int supportedCountriesCount;
-  final List<_FlagType> supportedFlags;
+_FlagType? _flagFromCountryCode(String code) {
+  return switch (code.toLowerCase()) {
+    'at' => _FlagType.austria,
+    'az' => _FlagType.azerbaijan,
+    'ae' => _FlagType.uae,
+    _ => null,
+  };
 }
 
 enum _FlagType { austria, azerbaijan, uae }

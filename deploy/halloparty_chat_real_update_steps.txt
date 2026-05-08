@@ -1,0 +1,36 @@
+تحديث الشات الحقيقي - 2026-05-07
+
+1. ارفع ملف الباك:
+   deploy/halloparty_chat_real_backend_update.zip
+
+2. فك الضغط داخل مسار الدومين في aaPanel:
+   /www/wwwroot/halloparty.online
+
+   يجب أن يستبدل الملفين:
+   backend/api/index.php
+   backend/src/ChatService.php
+
+3. من aaPanel > Databases > phpMyAdmin أو Import SQL نفذ الملف:
+   deploy/halloparty_chat_real_database_update.sql
+
+   الملف ينشئ جدول:
+   chat_gift_transactions
+
+4. تأكد أن PHP يقدر يكتب داخل:
+   backend/storage
+
+   الكود سينشئ تلقائيًا:
+   backend/storage/chat
+
+5. جرّب API سريعًا:
+   https://halloparty.online/api/health
+
+6. ثبّت APK الجديد على الموبايل:
+   deploy/halloparty_chat_real_debug.apk
+
+7. اختبر داخل التطبيق:
+   - إرسال رسالة نصية من زر الإرسال أو من زر send في الكيبورد.
+   - إرسال صورة من المعرض.
+   - إرسال رسالة صوتية: اضغط المايك، سجل، ثم إيقاف وإرسال.
+   - تشغيل الرسالة الصوتية من فقاعة الشات.
+   - إرسال هدية من صندوق الهدايا والتأكد من خصم coins وتسجيل transaction.

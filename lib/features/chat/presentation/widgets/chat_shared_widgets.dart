@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/layout/responsive.dart';
+import '../../../../core/widgets/resolved_image.dart';
+
 class ChatScreenPalette {
   static const Color primaryBlue = Color(0xFF285F98);
   static const Color lightBlue = Color(0xFFB4D1EF);
@@ -27,34 +30,45 @@ class ChatScreenHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Row(
+      padding: EdgeInsets.symmetric(
+        horizontal: metrics.pageHorizontalPadding(compact: 14, regular: 18),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          if (showSearch)
-            _SearchButton(onTap: onSearchTap)
-          else
-            const SizedBox(width: 38, height: 37),
-          const Spacer(),
-          const Text(
+          Align(
+            alignment: Alignment.centerLeft,
+            child: showSearch
+                ? _SearchButton(onTap: onSearchTap)
+                : SizedBox(
+                    width: metrics.spacing(38, min: 34, max: 42),
+                    height: metrics.spacing(37, min: 34, max: 42),
+                  ),
+          ),
+          Text(
             'المحادثات',
             style: TextStyle(
               color: Colors.black,
-              fontSize: 17,
+              fontSize: metrics.font(17, min: 15, max: 18),
               fontWeight: FontWeight.w600,
               height: 1.29,
             ),
           ),
-          const Spacer(),
-          GestureDetector(
-            onTap: onEditTap,
-            child: const Text(
-              'تعديل',
-              style: TextStyle(
-                color: ChatScreenPalette.primaryBlue,
-                fontSize: 17,
-                fontWeight: FontWeight.w400,
-                height: 1.29,
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: onEditTap,
+              child: Text(
+                'تعديل',
+                style: TextStyle(
+                  color: ChatScreenPalette.primaryBlue,
+                  fontSize: metrics.font(17, min: 15, max: 18),
+                  fontWeight: FontWeight.w400,
+                  height: 1.29,
+                ),
               ),
             ),
           ),
@@ -121,6 +135,8 @@ class ChatThreadRow extends StatelessWidget {
     this.showStatus = true,
     this.statusColor = const Color(0xFF34A853),
     this.avatarChild,
+    this.avatarAsset,
+    this.onAvatarTap,
   });
 
   final String title;
@@ -131,24 +147,33 @@ class ChatThreadRow extends StatelessWidget {
   final bool showStatus;
   final Color statusColor;
   final Widget? avatarChild;
+  final String? avatarAsset;
   final VoidCallback onTap;
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return InkWell(
       onTap: onTap,
       child: Container(
-        height: 74,
+        constraints: BoxConstraints(
+          minHeight: metrics.spacing(74, min: 68, max: 82),
+        ),
         color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        padding: EdgeInsets.symmetric(
+          horizontal: metrics.spacing(16, min: 12, max: 18),
+          vertical: metrics.spacing(11, min: 10, max: 14),
+        ),
         child: Row(
           children: [
             Icon(
               Icons.chevron_left_rounded,
               color: Colors.black.withValues(alpha: 0.3),
-              size: 20,
+              size: metrics.size(20).clamp(18, 22).toDouble(),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: metrics.spacing(14, min: 10, max: 16)),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -158,9 +183,9 @@ class ChatThreadRow extends StatelessWidget {
                       if (date != null)
                         Text(
                           date!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: ChatScreenPalette.mutedText,
-                            fontSize: 14,
+                            fontSize: metrics.font(14, min: 12, max: 15),
                             fontWeight: FontWeight.w400,
                           ),
                         ),
@@ -173,9 +198,9 @@ class ChatThreadRow extends StatelessWidget {
                             textAlign: TextAlign.right,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.black,
-                              fontSize: 16,
+                              fontSize: metrics.font(16, min: 14, max: 17),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -183,12 +208,12 @@ class ChatThreadRow extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: metrics.spacing(8, min: 6, max: 10)),
                   Row(
                     children: [
                       _ReadCheckIcon(style: readStyle),
                       if (readStyle != ChatReadStyle.none)
-                        const SizedBox(width: 6),
+                        SizedBox(width: metrics.spacing(6, min: 4, max: 8)),
                       Expanded(
                         child: preview.isEmpty
                             ? const SizedBox.shrink()
@@ -222,9 +247,13 @@ class ChatThreadRow extends StatelessWidget {
                                           preview,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             color: ChatScreenPalette.mutedText,
-                                            fontSize: 14,
+                                            fontSize: metrics.font(
+                                              14,
+                                              min: 12,
+                                              max: 15,
+                                            ),
                                             fontWeight: FontWeight.w400,
                                           ),
                                         ),
@@ -236,11 +265,18 @@ class ChatThreadRow extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: metrics.spacing(14, min: 10, max: 16)),
             Stack(
               clipBehavior: Clip.none,
               children: [
-                ChatAvatar(child: avatarChild),
+                InkWell(
+                  onTap: onAvatarTap,
+                  customBorder: const CircleBorder(),
+                  child: ChatAvatar(
+                    avatarAsset: avatarAsset,
+                    child: avatarChild,
+                  ),
+                ),
                 if (showStatus)
                   Positioned(
                     right: 1,
@@ -265,15 +301,19 @@ class ChatThreadRow extends StatelessWidget {
 }
 
 class ChatAvatar extends StatelessWidget {
-  const ChatAvatar({super.key, this.child});
+  const ChatAvatar({super.key, this.child, this.avatarAsset});
 
   final Widget? child;
+  final String? avatarAsset;
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+    final avatarSize = metrics.spacing(52, min: 44, max: 56);
+
     return Container(
-      width: 52,
-      height: 52,
+      width: avatarSize,
+      height: avatarSize,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: const LinearGradient(
@@ -289,11 +329,23 @@ class ChatAvatar extends StatelessWidget {
           ),
         ],
       ),
-      child: Center(
-        child:
-            child ??
-            const Icon(Icons.person_rounded, color: Colors.white, size: 28),
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: child != null
+          ? Center(child: child)
+          : (avatarAsset != null && avatarAsset!.trim().isNotEmpty)
+          ? ResolvedImage(
+              path: avatarAsset!,
+              fit: BoxFit.cover,
+              width: avatarSize,
+              height: avatarSize,
+            )
+          : Center(
+              child: Icon(
+                Icons.person_rounded,
+                color: Colors.white,
+                size: metrics.size(28).clamp(22, 30).toDouble(),
+              ),
+            ),
     );
   }
 }
@@ -322,6 +374,8 @@ class ChatScreenFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -333,26 +387,26 @@ class ChatScreenFrame extends StatelessWidget {
               color: ChatScreenPalette.appBarBackground,
               child: Column(
                 children: [
-                  const SizedBox(height: 48),
+                  SizedBox(height: metrics.spacing(48, min: 36, max: 52)),
                   ChatScreenHeader(
                     showSearch: showSearch,
                     onSearchTap: onSearchTap,
                     onEditTap: onEditTap,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: metrics.spacing(16, min: 12, max: 18)),
                   const Divider(
                     height: 1,
                     thickness: 1,
                     color: ChatScreenPalette.border,
                   ),
-                  const SizedBox(height: 11),
+                  SizedBox(height: metrics.spacing(11, min: 8, max: 12)),
                   ChatPrimaryTabs(
                     activeTab: activeTab,
                     onDiscoverTap: onDiscoverTap,
                     onMessagesTap: onMessagesTap,
                     onFriendsTap: onFriendsTap,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: metrics.spacing(12, min: 10, max: 14)),
                 ],
               ),
             ),
@@ -384,6 +438,8 @@ class _TopTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -395,13 +451,13 @@ class _TopTab extends StatelessWidget {
               color: isActive
                   ? ChatScreenPalette.primaryBlue
                   : ChatScreenPalette.lightBlue,
-              fontSize: 15,
+              fontSize: metrics.font(15, min: 13, max: 16),
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 5),
+          SizedBox(height: metrics.spacing(5, min: 4, max: 6)),
           Container(
-            width: underlineWidth,
+            width: metrics.spacing(underlineWidth, min: 28, max: 60),
             height: 1,
             decoration: BoxDecoration(
               color: isActive
@@ -423,6 +479,8 @@ class _SearchButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Semantics(
       label: 'chat-search-button',
       button: true,
@@ -431,16 +489,16 @@ class _SearchButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(19),
           child: Container(
-            width: 38,
-            height: 37,
+            width: metrics.spacing(38, min: 34, max: 42),
+            height: metrics.spacing(37, min: 34, max: 42),
             decoration: const BoxDecoration(
               color: ChatScreenPalette.lightBlue,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.search_rounded,
               color: ChatScreenPalette.primaryBlue,
-              size: 18,
+              size: metrics.size(18).clamp(16, 20).toDouble(),
             ),
           ),
         ),

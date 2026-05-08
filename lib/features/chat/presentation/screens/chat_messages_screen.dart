@@ -2,48 +2,50 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/router/app_router.dart';
 import '../../../home/presentation/widgets/main_bottom_navigation.dart';
+import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../data/chat_repository.dart';
 import '../widgets/chat_shared_widgets.dart';
 
-class ChatMessagesScreen extends StatelessWidget {
+class ChatMessagesScreen extends StatefulWidget {
   const ChatMessagesScreen({super.key});
 
-  static const List<_MessageThreadData> _topItems = [
-    _MessageThreadData(
-      title: 'خدمه العملاء',
-      preview: 'اي مشكله واجهتك يرجي تخبرني بتفاصيل',
-      avatarType: _MessageAvatarType.support,
-    ),
-    _MessageThreadData(
-      title: 'الاشعارات',
-      preview: 'ممكن تعيطي هديه',
-      avatarType: _MessageAvatarType.notification,
-    ),
-  ];
+  @override
+  State<ChatMessagesScreen> createState() => _ChatMessagesScreenState();
+}
 
-  static const List<_MessageThreadData> _bottomItems = [
-    _MessageThreadData(
-      title: 'محمد احمد',
-      date: '11/16/19',
-      preview: '',
-      statusColor: Color(0xFFEA4335),
-      readStyle: ChatReadStyle.single,
-    ),
-    _MessageThreadData(
-      title: 'محمد احمد',
-      date: '11/16/19',
-      preview: 'كيف حالك يارب ان تكون بخير ؟؟',
-      statusColor: Color(0xFF34A853),
-      readStyle: ChatReadStyle.double,
-    ),
-    _MessageThreadData(
-      title: 'محمد احمد',
-      date: '11/16/19',
-      preview: 'صورة',
-      statusColor: Color(0xFF34A853),
-      readStyle: ChatReadStyle.double,
-      isPhotoMessage: true,
-    ),
-  ];
+Color _messagesStatusColor(String hex) {
+  final normalized = hex.replaceFirst('#', '');
+  final value = int.tryParse(normalized, radix: 16) ?? 0x34A853;
+  return Color(0xFF000000 | value);
+}
+
+ChatReadStyle _messagesReadStyle(String value) {
+  switch (value) {
+    case 'single':
+      return ChatReadStyle.single;
+    case 'double':
+      return ChatReadStyle.double;
+    default:
+      return ChatReadStyle.none;
+  }
+}
+
+class _ChatMessagesScreenState extends State<ChatMessagesScreen> {
+  late Future<ChatMessagesPayload> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ChatRepository.instance.loadMessagesInbox();
+  }
+
+  Future<void> _refresh() async {
+    final future = ChatRepository.instance.loadMessagesInbox();
+    setState(() {
+      _future = future;
+    });
+    await future;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +63,9 @@ class ChatMessagesScreen extends StatelessWidget {
                   Navigator.of(context).pushNamed(AppRoutes.chatSelection);
                 },
                 onDiscoverTap: () {
-                  Navigator.of(context).pushNamed(AppRoutes.bootstrap);
+                  Navigator.of(
+                    context,
+                  ).pushReplacementNamed(AppRoutes.chatDiscover);
                 },
                 onMessagesTap: () {},
                 onFriendsTap: () {
@@ -69,37 +73,76 @@ class ChatMessagesScreen extends StatelessWidget {
                     context,
                   ).pushReplacementNamed(AppRoutes.chatInbox);
                 },
-                body: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    ..._topItems.map(
-                      (item) => ChatThreadRow(
-                        title: item.title,
-                        preview: item.preview,
-                        readStyle: ChatReadStyle.none,
-                        showStatus: false,
-                        avatarChild: _buildSpecialAvatar(item.avatarType),
-                        onTap: () {
-                          Navigator.of(context).pushNamed(AppRoutes.bootstrap);
-                        },
+                body: FutureBuilder<ChatMessagesPayload>(
+                  future: _future,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return _RefreshableMessagesMessage(
+                        onRefresh: _refresh,
+                        child: const Text('تعذر تحميل الرسائل'),
+                      );
+                    }
+
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final payload = snapshot.data!;
+                    final hasThreads =
+                        payload.systemThreads.isNotEmpty ||
+                        payload.threads.isNotEmpty;
+                    if (!hasThreads) {
+                      return _RefreshableMessagesMessage(
+                        onRefresh: _refresh,
+                        child: const Text('لا توجد رسائل حالياً'),
+                      );
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: _refresh,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        children: [
+                          ...payload.systemThreads.map(
+                            (item) => ChatThreadRow(
+                              title: item.title,
+                              preview: item.previewText,
+                              readStyle: ChatReadStyle.none,
+                              showStatus: false,
+                              avatarChild: _buildSystemAvatar(item.avatarAsset),
+                              onTap: () {
+                                Navigator.of(context).pushNamed(
+                                  AppRoutes.chatConversation,
+                                  arguments: item.id,
+                                );
+                              },
+                            ),
+                          ),
+                          ...payload.threads.map(
+                            (item) => ChatThreadRow(
+                              title: item.title,
+                              date: item.messageDateLabel,
+                              preview: item.previewText,
+                              avatarAsset: item.avatarAsset,
+                              statusColor: _messagesStatusColor(
+                                item.statusColorHex,
+                              ),
+                              readStyle: _messagesReadStyle(item.readStyle),
+                              isPhotoMessage: item.isPhotoPreview,
+                              onAvatarTap: () => _openThreadProfile(item),
+                              onTap: () {
+                                Navigator.of(context).pushNamed(
+                                  AppRoutes.chatConversation,
+                                  arguments: item.id,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    ..._bottomItems.map(
-                      (item) => ChatThreadRow(
-                        title: item.title,
-                        date: item.date,
-                        preview: item.preview,
-                        statusColor: item.statusColor,
-                        readStyle: item.readStyle,
-                        isPhotoMessage: item.isPhotoMessage,
-                        onTap: () {
-                          Navigator.of(
-                            context,
-                          ).pushNamed(AppRoutes.chatConversation);
-                        },
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -112,46 +155,54 @@ class ChatMessagesScreen extends StatelessWidget {
     );
   }
 
-  static Widget _buildSpecialAvatar(_MessageAvatarType type) {
-    switch (type) {
-      case _MessageAvatarType.defaultAvatar:
-        return const Icon(Icons.person_rounded, color: Colors.white, size: 28);
-      case _MessageAvatarType.support:
-        return Image.asset(
-          'assets/images/chat_support_icon.png',
-          width: 30,
-          height: 30,
-          filterQuality: FilterQuality.high,
-        );
-      case _MessageAvatarType.notification:
-        return Image.asset(
-          'assets/images/chat_notification_icon.png',
-          width: 30,
-          height: 30,
-          filterQuality: FilterQuality.high,
-        );
+  void _openThreadProfile(ChatThreadData item) {
+    final userId = item.targetUserId;
+    if (userId == null || userId < 1) {
+      return;
     }
+
+    Navigator.of(context).pushNamed(
+      AppRoutes.profile,
+      arguments: ProfileScreenArgs(
+        userId: userId,
+        fallbackName: item.title,
+        fallbackAvatarAsset: item.avatarAsset,
+      ),
+    );
+  }
+
+  static Widget _buildSystemAvatar(String assetPath) {
+    return Image.asset(
+      assetPath,
+      width: 30,
+      height: 30,
+      filterQuality: FilterQuality.high,
+    );
   }
 }
 
-class _MessageThreadData {
-  const _MessageThreadData({
-    required this.title,
-    required this.preview,
-    this.date,
-    this.statusColor = const Color(0xFF34A853),
-    this.readStyle = ChatReadStyle.none,
-    this.isPhotoMessage = false,
-    this.avatarType = _MessageAvatarType.defaultAvatar,
+class _RefreshableMessagesMessage extends StatelessWidget {
+  const _RefreshableMessagesMessage({
+    required this.child,
+    required this.onRefresh,
   });
 
-  final String title;
-  final String preview;
-  final String? date;
-  final Color statusColor;
-  final ChatReadStyle readStyle;
-  final bool isPhotoMessage;
-  final _MessageAvatarType avatarType;
-}
+  final Widget child;
+  final RefreshCallback onRefresh;
 
-enum _MessageAvatarType { defaultAvatar, support, notification }
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.5,
+            child: Center(child: child),
+          ),
+        ],
+      ),
+    );
+  }
+}

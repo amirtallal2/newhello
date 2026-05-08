@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../data/profile_agency_repository.dart';
+
 class ProfileAgencyLinkScreen extends StatefulWidget {
   const ProfileAgencyLinkScreen({super.key});
 
@@ -16,10 +18,12 @@ class _ProfileAgencyLinkScreenState extends State<ProfileAgencyLinkScreen> {
   static const List<String> _agencyTypes = ['لايف', 'صوتي', 'شات', 'لايف وشات'];
 
   final TextEditingController _invitationCodeController = TextEditingController(
-    text: '51112164844',
+    text: 'VL-AGY-2026',
   );
+  final ProfileAgencyRepository _repository = ProfileAgencyRepository.instance;
 
   String _selectedAgencyType = 'لايف-صوتي-شات-لايف وشات';
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -84,13 +88,57 @@ class _ProfileAgencyLinkScreenState extends State<ProfileAgencyLinkScreen> {
     }
   }
 
-  void _submitLinkRequest() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم ارسال طلب ربط الوكالة'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _submitLinkRequest() async {
+    final invitationCode = _invitationCodeController.text.trim();
+    final agencyType = _selectedAgencyType;
+
+    if (invitationCode.isEmpty || !_agencyTypes.contains(agencyType)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اكمل بيانات الربط أولًا.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final receipt = await _repository.submitJoinRequest(
+        invitationCode: invitationCode,
+        agencyType: agencyType,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم ارسال طلب ربط الوكالة: ${receipt.requestCode}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   @override
@@ -210,7 +258,8 @@ class _ProfileAgencyLinkScreenState extends State<ProfileAgencyLinkScreen> {
                   label: 'profile-agency-link-submit',
                   button: true,
                   child: InkWell(
-                    onTap: _submitLinkRequest,
+                    key: const ValueKey('profile-agency-link-submit'),
+                    onTap: _isSubmitting ? null : _submitLinkRequest,
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       height: 40,
@@ -219,8 +268,8 @@ class _ProfileAgencyLinkScreenState extends State<ProfileAgencyLinkScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
-                      child: const Text(
-                        'ربط الان',
+                      child: Text(
+                        _isSubmitting ? 'جارٍ الربط...' : 'ربط الان',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 10,

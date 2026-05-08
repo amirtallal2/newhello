@@ -1,24 +1,79 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:newhello/app/app.dart';
 import 'package:newhello/app/router/app_router.dart';
+import 'package:newhello/core/storage/app_launch_store.dart';
 import 'package:newhello/features/auth/data/auth_flow_store.dart';
 import 'package:newhello/features/auth/data/auth_repository.dart';
+import 'package:newhello/features/chat/data/chat_repository.dart';
+import 'package:newhello/features/home/data/club_repository.dart';
+import 'package:newhello/features/home/data/live_repository.dart';
+import 'package:newhello/features/post/data/post_repository.dart';
+import 'package:newhello/features/profile/data/profile_agency_repository.dart';
+import 'package:newhello/features/profile/data/profile_account_repository.dart';
+import 'package:newhello/features/profile/data/profile_economy_repository.dart';
+import 'package:newhello/features/profile/data/profile_levels_repository.dart';
+import 'package:newhello/features/profile/data/profile_referral_repository.dart';
+import 'package:newhello/features/profile/data/profile_support_repository.dart';
 import 'package:newhello/features/profile/presentation/screens/profile_connections_screen.dart';
 import 'package:newhello/features/room/data/room_gift_repository.dart';
+import 'package:newhello/features/room/data/room_game_repository.dart';
 import 'package:newhello/features/room/data/room_music_repository.dart';
+import 'package:newhello/features/room/data/room_audio_repository.dart';
 import 'package:newhello/features/room/data/room_repository.dart';
+import 'package:newhello/features/social/data/social_repository.dart';
 import 'package:newhello/features/room/presentation/controllers/room_background_controller.dart';
 import 'package:newhello/features/room/presentation/controllers/room_session_controller.dart';
+import 'package:newhello/features/room/presentation/screens/room_game_lobby_screen.dart';
+
+Future<void> _pumpRouteAtSize(
+  WidgetTester tester, {
+  required String route,
+  required Size size,
+}) async {
+  final binding = tester.binding;
+  await binding.setSurfaceSize(size);
+  addTearDown(() async {
+    await binding.setSurfaceSize(null);
+  });
+
+  await tester.pumpWidget(
+    MaterialApp(
+      initialRoute: route,
+      onGenerateRoute: AppRouter.onGenerateRoute,
+    ),
+  );
+  await tester.pumpAndSettle();
+}
 
 void main() {
-  setUp(() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await AppLaunchStore.instance.initialize();
+    await AppLaunchStore.instance.reset();
+    await AuthFlowStore.instance.initialize();
     AuthRepository.instance = FakeAuthRepository();
+    ChatRepository.instance = FakeChatRepository();
+    ClubRepository.instance = FakeClubRepository();
+    LiveRepository.instance = FakeLiveRepository();
+    PostRepository.instance = FakePostRepository();
+    ProfileAccountRepository.instance = FakeProfileAccountRepository();
+    ProfileAgencyRepository.instance = FakeProfileAgencyRepository();
+    ProfileEconomyRepository.instance = FakeProfileEconomyRepository();
+    ProfileLevelsRepository.instance = FakeProfileLevelsRepository();
+    ProfileReferralRepository.instance = FakeProfileReferralRepository();
+    SocialRepository.instance = FakeSocialRepository();
     RoomGiftRepository.instance = FakeRoomGiftRepository();
+    RoomGameRepository.instance = FakeRoomGameRepository();
     RoomMusicRepository.instance = FakeRoomMusicRepository();
+    RoomAudioRepository.instance = FakeRoomAudioRepository();
     RoomRepository.instance = FakeRoomRepository();
-    AuthFlowStore.instance.reset();
+    ProfileSupportRepository.instance = FakeProfileSupportRepository();
+    await AuthFlowStore.instance.reset();
     RoomSessionController.instance.reset();
     RoomBackgroundController.instance.reset();
   });
@@ -51,7 +106,10 @@ void main() {
 
     expect(find.text('Let’s dive into your account!'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Apple'), findsOneWidget);
+    expect(
+      find.text('Continue with Apple'),
+      Platform.isIOS ? findsOneWidget : findsNothing,
+    );
     expect(find.text('Continue with Number'), findsOneWidget);
     expect(find.text('Log in'), findsOneWidget);
 
@@ -92,6 +150,36 @@ void main() {
     expect(find.byType(TextField), findsNWidgets(2));
   });
 
+  testWidgets('later launches skip onboarding when it was already seen', (
+    WidgetTester tester,
+  ) async {
+    await AppLaunchStore.instance.markOnboardingSeen();
+
+    await tester.pumpWidget(const VoiceLiveApp());
+    await tester.pump(const Duration(milliseconds: 1700));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Let’s dive into your account!'), findsOneWidget);
+    expect(find.text('Discover Meaningful\nConnections'), findsNothing);
+  });
+
+  testWidgets('saved auth session opens home instead of auth flow', (
+    WidgetTester tester,
+  ) async {
+    await AppLaunchStore.instance.markOnboardingSeen();
+    await AuthFlowStore.instance.saveAuthSession(
+      token: 'persisted-token',
+      user: <String, dynamic>{'id': 1, 'email': 'persisted@example.com'},
+    );
+
+    await tester.pumpWidget(const VoiceLiveApp());
+    await tester.pump(const Duration(milliseconds: 1700));
+    await tester.pumpAndSettle();
+
+    expect(find.text('جديد'), findsOneWidget);
+    expect(find.text('Let’s dive into your account!'), findsNothing);
+  });
+
   testWidgets('email login submit routes to home screen', (
     WidgetTester tester,
   ) async {
@@ -114,8 +202,8 @@ void main() {
     expect(find.text('هاشتاق'), findsOneWidget);
     expect(find.text('الالعاب'), findsOneWidget);
     expect(find.text('خدمة العملاء'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Live'), findsOneWidget);
+    expect(find.text('الرئيسية'), findsOneWidget);
+    expect(find.text('اللايف'), findsOneWidget);
   });
 
   testWidgets('home chat tab routes to chat inbox screen', (
@@ -128,9 +216,9 @@ void main() {
       ),
     );
 
-    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('الدردشة'), findsOneWidget);
 
-    await tester.tap(find.text('Chat'));
+    await tester.tap(find.text('الدردشة'));
     await tester.pumpAndSettle();
 
     expect(find.text('المحادثات'), findsOneWidget);
@@ -150,14 +238,147 @@ void main() {
       ),
     );
 
-    expect(find.text('Live'), findsOneWidget);
+    expect(find.text('اللايف'), findsOneWidget);
 
-    await tester.tap(find.text('Live'));
+    await tester.tap(find.text('اللايف'));
     await tester.pumpAndSettle();
 
     expect(find.text('بث مباشر'), findsOneWidget);
     expect(find.text('اهلآ بكم في اللايف الخاص بنـا'), findsOneWidget);
     expect(find.byKey(const ValueKey('live-room-card-0')), findsOneWidget);
+  });
+
+  testWidgets('home search button opens figma search screen with real tabs', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.home,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('home-search-field')), findsOneWidget);
+    expect(find.text('مستخدم'), findsOneWidget);
+    expect(find.text('غرفة'), findsOneWidget);
+    expect(find.text('عمليات البحث الأخيرة'), findsOneWidget);
+    expect(find.text('Mo'), findsOneWidget);
+  });
+
+  testWidgets('home notifications button opens figma notifications screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.home,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.notifications_none_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('الاشعارات الخاصة بك'), findsOneWidget);
+    expect(find.text('تعليق جديد'), findsOneWidget);
+    expect(find.textContaining('محمد احمد'), findsOneWidget);
+  });
+
+  testWidgets('home create room button routes to create room screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.home,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+
+    await tester.tap(find.text('انشاء غرفة'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('create-room-title')), findsOneWidget);
+    expect(find.text('انشاء غرفتي'), findsOneWidget);
+    expect(find.text('انشاء غرفة'), findsOneWidget);
+  });
+
+  testWidgets('home clubs button opens real clubs list', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.home,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+
+    await tester.tap(find.text('النوادى'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('النوادى'), findsOneWidget);
+    expect(find.text('نادي ملوك هالو'), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-club-create-fab')), findsOneWidget);
+  });
+
+  testWidgets('create club submit saves a real club', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.homeClubCreate,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('home-club-create-name-field')),
+      'نادي الاختبار',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('home-club-create-code-field')),
+      'TESTCLUB',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('home-club-create-announcement-field')),
+      'إعلان نادي الاختبار',
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -650));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('home-club-create-submit-button')),
+    );
+    await tester.pumpAndSettle();
+
+    final clubs = await ClubRepository.instance.listClubs(scope: 'newest');
+    expect(clubs.any((club) => club.name == 'نادي الاختبار'), isTrue);
+  });
+
+  testWidgets('create room submit opens created room screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.roomCreate,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).at(0), 'غرفة الاختبار');
+    await tester.enterText(find.byType(TextField).at(1), 'شعار الغرفة الجديد');
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('create-room-submit-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('create-room-submit-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('غرفة الاختبار'), findsOneWidget);
+
+    final rooms = await RoomRepository.instance.listRooms();
+    expect(rooms.any((room) => room.roomTitle == 'غرفة الاختبار'), isTrue);
   });
 
   testWidgets('live card routes to live room screen', (
@@ -169,6 +390,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('live-room-card-0')));
     await tester.pumpAndSettle();
@@ -187,6 +409,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('live-room-tools-action'));
     await tester.pumpAndSettle();
@@ -199,7 +422,7 @@ void main() {
     expect(find.text('اعدادات التاثير'), findsOneWidget);
   });
 
-  testWidgets('live room effects action opens effects mode', (
+  testWidgets('live room effects action opens settings panel directly', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -208,6 +431,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('live-room-tools-action'));
     await tester.pumpAndSettle();
@@ -219,6 +443,11 @@ void main() {
       find.byKey(const ValueKey('live-room-effects-mode')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('live-room-effect-settings-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('إعدادات التأثير واللايف'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('live-room-effects-settings')),
       findsOneWidget,
@@ -239,12 +468,11 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('live-room-tools-action'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('اعدادات التاثير'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('live-room-effects-settings')));
     await tester.pumpAndSettle();
 
     expect(
@@ -267,6 +495,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('live-room-people-action'));
     await tester.pumpAndSettle();
@@ -277,7 +506,10 @@ void main() {
     );
     expect(find.text('المشاهدين'), findsOneWidget);
     expect(find.text('افضل الداعمين'), findsOneWidget);
-    expect(find.text('Mohammed Ahmed'), findsNWidgets(4));
+    expect(find.text('Mohammed Ahmed'), findsWidgets);
+    expect(find.text('Sara Mohamed'), findsWidgets);
+    expect(find.text('Nona Mohamed'), findsWidgets);
+    expect(find.text('Yara Mohamed'), findsWidgets);
   });
 
   testWidgets('top supporters entry opens contribution panel', (
@@ -289,6 +521,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('live-room-people-action'));
     await tester.pumpAndSettle();
@@ -300,7 +533,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('قائمة المساهمات لهذه الجولة'), findsOneWidget);
-    expect(find.text('لا يوجد الان بيانات'), findsOneWidget);
+    expect(find.text('Mohammed Ahmed'), findsOneWidget);
+    expect(find.text('100 Coin'), findsOneWidget);
     expect(find.text('الهدية الاجمالية'), findsOneWidget);
     expect(find.text('عدد المرسلين'), findsOneWidget);
   });
@@ -314,10 +548,15 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('live-room-tools-action'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('اعدادات التاثير'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('live-room-effect-settings-dismiss')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('live-room-effects-pk')));
     await tester.pumpAndSettle();
@@ -328,9 +567,10 @@ void main() {
     expect(find.text('بدء المطابقة'), findsOneWidget);
     expect(find.text('وضع الدعوة'), findsOneWidget);
     expect(find.text('تحدي الاصدقاء'), findsOneWidget);
+    expect(find.text('إعدادات PK'), findsOneWidget);
   });
 
-  testWidgets('start matching opens pk live settings panel', (
+  testWidgets('pk settings action opens pk live settings panel', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -339,14 +579,19 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('live-room-tools-action'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('اعدادات التاثير'));
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('live-room-effect-settings-dismiss')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('live-room-effects-pk')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('بدء المطابقة'));
+    await tester.tap(find.text('إعدادات PK'));
     await tester.pumpAndSettle();
 
     expect(
@@ -369,13 +614,15 @@ void main() {
       ),
     );
 
-    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('الملف'), findsOneWidget);
 
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.text('الملف'));
     await tester.pumpAndSettle();
 
     expect(find.text('بسمة أحمد'), findsOneWidget);
     expect(find.text('Shark.island'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-avatar-frame')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-avatar-badge')), findsOneWidget);
     expect(find.text('مركز الدعم'), findsOneWidget);
     expect(find.text('تسجيل الخروج'), findsOneWidget);
   });
@@ -389,17 +636,18 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('profile-edit-entry')));
     await tester.pumpAndSettle();
 
     expect(find.text('التحرير'), findsOneWidget);
-    expect(find.text('بسملة محمد'), findsOneWidget);
+    expect(find.text('بسمة أحمد'), findsOneWidget);
     expect(find.text('عيد ميلاد'), findsOneWidget);
     expect(find.text('2004/09/20'), findsOneWidget);
   });
 
-  testWidgets('profile settings item routes to profile edit screen', (
+  testWidgets('profile settings item routes to profile settings screen', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -408,13 +656,15 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('الإعدادات'));
     await tester.tap(find.text('الإعدادات'));
     await tester.pumpAndSettle();
 
     expect(find.text('التحرير'), findsOneWidget);
-    expect(find.text('الدولة الخاصة بك'), findsOneWidget);
+    expect(find.text('بسمة أحمد'), findsOneWidget);
+    expect(find.text('غير قابل للتعديل'), findsOneWidget);
     expect(find.text('توقيع شخصي'), findsOneWidget);
   });
 
@@ -427,6 +677,7 @@ void main() {
           onGenerateRoute: AppRouter.onGenerateRoute,
         ),
       );
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('المتابعون'));
       await tester.pumpAndSettle();
@@ -481,6 +732,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('الدخل').first);
     await tester.tap(find.text('الدخل').first);
@@ -502,6 +754,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('الشحن').first);
     await tester.tap(find.text('الشحن').first);
@@ -529,8 +782,8 @@ void main() {
 
     expect(find.text('رصيد الكوينز الخاص بك :'), findsOneWidget);
     expect(find.text('5000'), findsOneWidget);
-    expect(find.text('5000000'), findsOneWidget);
-    expect(find.text('500000'), findsOneWidget);
+    expect(find.text('1000'), findsOneWidget);
+    expect(find.text('100'), findsWidgets);
     expect(
       find.byKey(const ValueKey('profile-wallet-contact')),
       findsOneWidget,
@@ -547,6 +800,9 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('profile-wallet-contact')),
+    );
     await tester.tap(find.byKey(const ValueKey('profile-wallet-contact')));
     await tester.pumpAndSettle();
 
@@ -574,10 +830,10 @@ void main() {
 
     expect(find.text('تسجيل'), findsOneWidget);
     expect(find.text('تحويل المبلغ'), findsOneWidget);
-    expect(find.text('عدد العملات المتاحة الان : 500'), findsOneWidget);
+    expect(find.text('عدد العملات المتاحة الان : 1235'), findsOneWidget);
     expect(find.text('الكل'), findsOneWidget);
     expect(find.text('تم الشحن بنجاح'), findsWidgets);
-    expect(find.text('تم الغاء العملية'), findsWidgets);
+    expect(find.text('تم شراء العنصر'), findsWidgets);
   });
 
   testWidgets('wallet history action routes to income history screen', (
@@ -595,8 +851,8 @@ void main() {
 
     expect(find.text('History'), findsOneWidget);
     expect(find.text('الكوينز'), findsOneWidget);
-    expect(find.text('الدخل: 2548'), findsOneWidget);
-    expect(find.text('تبادل الحبوب الي كوينز'), findsWidgets);
+    expect(find.text('الدخل: 1235'), findsOneWidget);
+    expect(find.text('شحن 200 عملة الآن'), findsWidgets);
   });
 
   testWidgets('income history supports diamonds state from wallet flow', (
@@ -617,7 +873,7 @@ void main() {
 
     expect(find.text('History'), findsOneWidget);
     expect(find.text('الماس'), findsOneWidget);
-    expect(find.text('الدخل: 2548'), findsOneWidget);
+    expect(find.text('الدخل: 5'), findsOneWidget);
     expect(find.text('تبادل الحبوب الي الماس'), findsWidgets);
     expect(find.text('هدايا الاليف'), findsOneWidget);
     expect(find.text('هدايا الغرف الصوتي'), findsOneWidget);
@@ -634,6 +890,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('المتجر').first);
     await tester.tap(find.text('المتجر').first);
@@ -642,7 +899,7 @@ void main() {
     expect(find.text('المتجر'), findsOneWidget);
     expect(find.text('الاطارات المتحركة'), findsOneWidget);
     expect(find.text('قبعات الدردشة'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('الملف'), findsOneWidget);
   });
 
   testWidgets('profile bag action routes to bag screen', (
@@ -654,6 +911,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('الحقيبة').first);
     await tester.tap(find.text('الحقيبة').first);
@@ -661,8 +919,8 @@ void main() {
 
     expect(find.text('حقيبتي'), findsOneWidget);
     expect(find.text('الاطارات المتحركة'), findsOneWidget);
-    expect(find.text('استخدام'), findsNWidgets(4));
-    expect(find.text('الغاء'), findsNWidgets(4));
+    expect(find.text('استخدام'), findsOneWidget);
+    expect(find.text('الغاء'), findsOneWidget);
     expect(find.text('ارتداء'), findsOneWidget);
     expect(find.text('ازالة'), findsOneWidget);
   });
@@ -684,9 +942,9 @@ void main() {
 
     expect(find.text('الاطارات'), findsOneWidget);
     expect(find.text('جديد'), findsOneWidget);
-    expect(find.text('معاينة'), findsNWidgets(6));
-    expect(find.text('شراء'), findsNWidgets(6));
-    expect(find.text('ارسال'), findsNWidgets(6));
+    expect(find.text('معاينة'), findsOneWidget);
+    expect(find.text('شراء'), findsOneWidget);
+    expect(find.text('ارسال'), findsOneWidget);
   });
 
   testWidgets(
@@ -709,9 +967,9 @@ void main() {
 
       expect(find.text('الخلفيات'), findsOneWidget);
       expect(find.text('جديد'), findsOneWidget);
-      expect(find.text('معاينة'), findsNWidgets(6));
-      expect(find.text('شراء'), findsNWidgets(6));
-      expect(find.text('ارسال'), findsNWidgets(6));
+      expect(find.text('معاينة'), findsOneWidget);
+      expect(find.text('شراء'), findsOneWidget);
+      expect(find.text('ارسال'), findsOneWidget);
     },
   );
 
@@ -732,9 +990,9 @@ void main() {
 
       expect(find.text('الاطارات المتحركة'), findsOneWidget);
       expect(find.text('جديد'), findsOneWidget);
-      expect(find.text('معاينة'), findsNWidgets(6));
-      expect(find.text('شراء'), findsNWidgets(6));
-      expect(find.text('ارسال'), findsNWidgets(6));
+      expect(find.text('معاينة'), findsOneWidget);
+      expect(find.text('شراء'), findsOneWidget);
+      expect(find.text('ارسال'), findsOneWidget);
     },
   );
 
@@ -758,9 +1016,9 @@ void main() {
 
     expect(find.text('اطارات المحادثات'), findsOneWidget);
     expect(find.text('جديد'), findsOneWidget);
-    expect(find.text('معاينة'), findsNWidgets(6));
-    expect(find.text('شراء'), findsNWidgets(6));
-    expect(find.text('ارسال'), findsNWidgets(6));
+    expect(find.text('معاينة'), findsOneWidget);
+    expect(find.text('شراء'), findsOneWidget);
+    expect(find.text('ارسال'), findsOneWidget);
   });
 
   testWidgets('store entry effects category routes to entry effects screen', (
@@ -783,9 +1041,9 @@ void main() {
 
     expect(find.text('الدخلات'), findsOneWidget);
     expect(find.text('جديد'), findsOneWidget);
-    expect(find.text('معاينة'), findsNWidgets(6));
-    expect(find.text('شراء'), findsNWidgets(6));
-    expect(find.text('ارسال'), findsNWidgets(6));
+    expect(find.text('معاينة'), findsOneWidget);
+    expect(find.text('شراء'), findsOneWidget);
+    expect(find.text('ارسال'), findsOneWidget);
   });
 
   testWidgets('entry effects item buy button opens purchase dialog overlay', (
@@ -797,6 +1055,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('profile-store-entry-effects-item-buy-0')),
@@ -825,6 +1084,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('profile-store-animated-frames-item-buy-0')),
@@ -853,6 +1113,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('profile-store-frames-item-buy-0')),
@@ -881,6 +1142,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('ارسال').first);
     await tester.pumpAndSettle();
@@ -903,6 +1165,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('مركز الدعم'));
     await tester.tap(find.text('مركز الدعم'));
@@ -915,6 +1178,62 @@ void main() {
     expect(find.text('0/300'), findsOneWidget);
   });
 
+  testWidgets('shipping agency search filters agencies from repository', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.profileShippingAgency,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('profile-shipping-agency-card-0')),
+      findsOneWidget,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('profile-shipping-agency-field')),
+      'سارة',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('profile-shipping-agency-search')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sara Mohamed'), findsOneWidget);
+    expect(find.text('Mohamed Ahmed'), findsNothing);
+  });
+
+  testWidgets('support center submits ticket through repository', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.profileSupportCenter,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('profile-support-description')),
+      'يوجد تأخير في وصول الشحن داخل التطبيق.',
+    );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('profile-support-submit')),
+    );
+    await tester.tap(find.byKey(const ValueKey('profile-support-submit')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('SUP-000003'), findsOneWidget);
+    expect(find.text('0/300'), findsOneWidget);
+  });
+
   testWidgets('profile open agency item routes to open agency screen', (
     WidgetTester tester,
   ) async {
@@ -924,6 +1243,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('فتح وكالة'));
     await tester.tap(find.text('فتح وكالة'));
@@ -944,6 +1264,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('انضم إلى وكالة'));
     await tester.tap(find.text('انضم إلى وكالة'));
@@ -963,6 +1284,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('الانضمام الي الوكالة'));
     await tester.pumpAndSettle();
@@ -981,6 +1303,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('profile-agency-link-type-field')),
@@ -1002,6 +1325,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('profile-open-agency-country-field')),
@@ -1012,6 +1336,89 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('مصر'), findsOneWidget);
+  });
+
+  testWidgets('profile invitation code opens real referral screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.profile,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('كود الدعوة'));
+    await tester.tap(find.text('كود الدعوة'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Halo Party'), findsOneWidget);
+    expect(find.text('HPABC123'), findsOneWidget);
+    expect(find.text('دعوة الاصدقاء'), findsOneWidget);
+  });
+
+  testWidgets('agency link submit shows join request code', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.profileAgencyLink,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('profile-agency-link-type-field')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('لايف'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('profile-agency-link-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('AJR-'), findsOneWidget);
+  });
+
+  testWidgets('open agency submit shows open request code', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.profileOpenAgency,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('profile-open-agency-name')),
+      'وكالة جديدة',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('profile-open-agency-country-field')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('مصر'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('profile-open-agency-phone')),
+      '201012345678',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('profile-open-agency-address')),
+      'القاهرة',
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('profile-open-agency-submit')),
+    );
+    await tester.tap(find.byKey(const ValueKey('profile-open-agency-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('AOR-'), findsOneWidget);
   });
 
   testWidgets('profile income history routes to income history screen', (
@@ -1030,9 +1437,9 @@ void main() {
 
     expect(find.text('History'), findsOneWidget);
     expect(find.text('الكوينز'), findsOneWidget);
-    expect(find.text('الدخل: 2548'), findsOneWidget);
+    expect(find.text('الدخل: 1235'), findsOneWidget);
     expect(find.text('الكل'), findsOneWidget);
-    expect(find.text('تبادل الحبوب الي كوينز'), findsWidgets);
+    expect(find.text('شحن 200 عملة الآن'), findsWidgets);
 
     await tester.tap(find.text('الماس'));
     await tester.pumpAndSettle();
@@ -1050,6 +1457,7 @@ void main() {
           onGenerateRoute: AppRouter.onGenerateRoute,
         ),
       );
+      await tester.pumpAndSettle();
 
       expect(
         find.bySemanticsLabel('profile-inline-edit-الاسم'),
@@ -1064,6 +1472,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.bySemanticsLabel('profile-inline-edit-جنس'), findsNothing);
+      expect(find.text('غير قابل للتعديل'), findsOneWidget);
     },
   );
 
@@ -1076,8 +1485,11 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsLabel('profile-inline-edit-الاسم'));
+    final nameEdit = find.bySemanticsLabel('profile-inline-edit-الاسم');
+    await tester.ensureVisible(nameEdit);
+    await tester.tap(nameEdit, warnIfMissed: false);
     await tester.pumpAndSettle();
 
     expect(
@@ -1105,26 +1517,42 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsLabel('profile-inline-edit-عيد ميلاد'));
+    final birthdateEdit = find.bySemanticsLabel(
+      'profile-inline-edit-عيد ميلاد',
+    );
+    await tester.ensureVisible(birthdateEdit);
+    await tester.tap(birthdateEdit, warnIfMissed: false);
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey('profile-birthdate-dialog-input')),
+      find.byKey(const ValueKey('profile-birthdate-day-picker')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('profile-birthdate-month-picker')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('profile-birthdate-year-picker')),
       findsOneWidget,
     );
     expect(find.text('عيد الميلاد'), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(const ValueKey('profile-birthdate-dialog-input')),
-      '20/05/2004',
+    await tester.tap(
+      find.byKey(const ValueKey('profile-birthdate-month-picker')),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('05').last);
+    await tester.pumpAndSettle();
+
     await tester.tap(
       find.byKey(const ValueKey('profile-birthdate-dialog-confirm')),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('20/05/2004'), findsOneWidget);
+    expect(find.text('2004/05/20'), findsOneWidget);
   });
 
   testWidgets('profile country inline edit opens dialog and updates value', (
@@ -1136,28 +1564,27 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
-
-    await tester.tap(
-      find.bySemanticsLabel('profile-inline-edit-الدولة الخاصة بك'),
-    );
     await tester.pumpAndSettle();
 
+    final countryEdit = find.bySemanticsLabel(
+      'profile-inline-edit-الدولة الخاصة بك',
+    );
+    await tester.ensureVisible(countryEdit);
+    await tester.tap(countryEdit, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('اختار بلد'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('profile-country-dialog-input')),
+      find.byKey(const ValueKey('profile-country-option-السعودية')),
       findsOneWidget,
     );
-    expect(find.text('الدولة'), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(const ValueKey('profile-country-dialog-input')),
-      'الاردن',
-    );
     await tester.tap(
-      find.byKey(const ValueKey('profile-country-dialog-confirm')),
+      find.byKey(const ValueKey('profile-country-option-السعودية')),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('الاردن'), findsOneWidget);
+    expect(find.text('السعودية'), findsOneWidget);
   });
 
   testWidgets('home post tab routes to post screen', (
@@ -1170,15 +1597,15 @@ void main() {
       ),
     );
 
-    expect(find.text('Post'), findsOneWidget);
+    expect(find.text('المنشورات'), findsOneWidget);
 
-    await tester.tap(find.text('Post'));
+    await tester.tap(find.text('المنشورات'));
     await tester.pumpAndSettle();
 
     expect(find.text('الجميع'), findsOneWidget);
     expect(find.text('الاصدقاء'), findsOneWidget);
     expect(find.text('اسماء فتحي'), findsWidgets);
-    expect(find.text('متابعة'), findsWidgets);
+    expect(find.text('اضغط مطولا للاختيارات'), findsNothing);
   });
 
   testWidgets('post friends tab switches cards to unfollow state', (
@@ -1190,6 +1617,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('post-tab-friends')));
     await tester.pumpAndSettle();
@@ -1207,6 +1635,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('post-compose-button'));
     await tester.pumpAndSettle();
@@ -1222,6 +1651,204 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('5/1000'), findsOneWidget);
+  });
+
+  testWidgets('post create submit returns to feed with new post', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.post,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('post-compose-button'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('post-create-editor')),
+      'هذا اول بوست حقيقي',
+    );
+    await tester.tap(find.byKey(const ValueKey('post-create-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('هذا اول بوست حقيقي'), findsOneWidget);
+    expect(find.text('المستخدم الحالي'), findsOneWidget);
+    expect(find.text('منشورك'), findsNothing);
+  });
+
+  testWidgets('post report opens admin-controlled reasons sheet', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.post,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('اسماء فتحي').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('إبلاغ عن مشكلة').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('سبب البلاغ'), findsOneWidget);
+    expect(find.text('محتوى مزعج أو سبام'), findsOneWidget);
+
+    await tester.tap(find.text('محتوى مزعج أو سبام'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تم إرسال البلاغ بنجاح.'), findsOneWidget);
+  });
+
+  testWidgets('post long press opens actions menu', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.post,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('اسماء فتحي').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('اختيارات المنشور'), findsOneWidget);
+    expect(find.text('لايك'), findsOneWidget);
+    expect(find.text('التعليقات'), findsOneWidget);
+    expect(find.text('مشاركة'), findsOneWidget);
+    expect(find.text('إبلاغ عن مشكلة'), findsOneWidget);
+  });
+
+  testWidgets('post like comments and share actions update feed', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.post,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('post-like-1-off')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('post-like-1-on')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('post-comment-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('التعليقات'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('post-comment-input')),
+      'تعليق اختبار جديد',
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, 'إرسال'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تعليق اختبار جديد'), findsOneWidget);
+    expect(find.text('التعليقات'), findsOneWidget);
+
+    await tester.longPress(find.text('تعليق اختبار جديد'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('اختيارات التعليق'), findsOneWidget);
+    expect(find.text('تعديل التعليق'), findsOneWidget);
+    expect(find.text('حذف التعليق'), findsOneWidget);
+
+    await tester.tap(find.text('تعديل التعليق'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'تعليق بعد التعديل');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تعليق بعد التعديل'), findsOneWidget);
+
+    await tester.longPress(find.text('تعليق بعد التعديل'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حذف التعليق'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'حذف'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تعليق بعد التعديل'), findsNothing);
+
+    await tester.longPress(find.text('منشور جميل جدا.'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('إبلاغ عن تعليق'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('محتوى مزعج أو سبام'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('سبب البلاغ'), findsNothing);
+    expect(find.text('التعليقات'), findsOneWidget);
+
+    Navigator.of(tester.element(find.text('التعليقات'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('post-share-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('شارك منشور'), findsOneWidget);
+  });
+
+  testWidgets('post owner can edit and delete own post', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.post,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('post-compose-button'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('post-create-editor')),
+      'هذا بوست قابل للتعديل',
+    );
+    await tester.tap(find.byKey(const ValueKey('post-create-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تعديل'), findsNothing);
+    expect(find.text('حذف'), findsNothing);
+
+    await tester.longPress(find.text('هذا بوست قابل للتعديل'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('تعديل المنشور'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تعديل المنشور'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('post-create-editor')),
+      'هذا بوست بعد التعديل',
+    );
+    await tester.tap(find.byKey(const ValueKey('post-create-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('هذا بوست بعد التعديل'), findsOneWidget);
+
+    await tester.longPress(find.text('هذا بوست بعد التعديل'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('حذف المنشور'));
+    await tester.tap(find.text('حذف المنشور'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('حذف المنشور'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ElevatedButton, 'حذف'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('هذا بوست بعد التعديل'), findsNothing);
   });
 
   testWidgets('home room card routes to room screen', (
@@ -1691,6 +2318,61 @@ void main() {
     expect(find.text('دومينو'), findsOneWidget);
   });
 
+  testWidgets('tapping room game opens game lobby screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: AppRoutes.room,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('room-games'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('room-game-wheel_of_fortune'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('جلسة اللعبة'), findsOneWidget);
+    expect(find.text('عجلة الحظ'), findsOneWidget);
+    expect(find.bySemanticsLabel('room-game-join'), findsOneWidget);
+  });
+
+  testWidgets('joining then leaving room game updates lobby state', (
+    WidgetTester tester,
+  ) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+        home: const SizedBox.shrink(),
+      ),
+    );
+    navigatorKey.currentState!.pushNamed(
+      AppRoutes.roomGameLobby,
+      arguments: const RoomGameLobbyScreenArgs(roomId: 1, gameId: 1),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('room-game-join'), findsOneWidget);
+    await tester.ensureVisible(find.bySemanticsLabel('room-game-join'));
+    await tester.tap(find.bySemanticsLabel('room-game-join'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('المستخدم الحالي'), findsOneWidget);
+    expect(find.bySemanticsLabel('room-game-leave'), findsOneWidget);
+
+    await tester.ensureVisible(find.bySemanticsLabel('room-game-leave'));
+    await tester.tap(find.bySemanticsLabel('room-game-leave'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('room-game-join'), findsOneWidget);
+    expect(find.text('لا توجد جلسة نشطة حاليًا'), findsOneWidget);
+  });
+
   testWidgets('tapping room gift button opens gift panel sheet', (
     WidgetTester tester,
   ) async {
@@ -1766,7 +2448,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('تم ارسال الهدية'), findsOneWidget);
-    expect(find.text('235 \$'), findsOneWidget);
+    expect(find.text('1225 \$'), findsOneWidget);
   });
 
   testWidgets('chat inbox message tab routes to chat messages screen', (
@@ -1778,6 +2460,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('رسالة'), findsOneWidget);
 
@@ -1798,13 +2481,14 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('محمد احمد'), findsWidgets);
 
     await tester.tap(find.text('محمد احمد').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('احمد محمد'), findsOneWidget);
+    expect(find.text('محمد احمد'), findsWidgets);
     expect(find.text('Good morning!'), findsOneWidget);
     expect(
       find.text('الرجاء الالتزام بالقوانين والحفاظ علي الالفاظ'),
@@ -1821,6 +2505,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('chat-search-button'));
     await tester.pumpAndSettle();
@@ -1839,6 +2524,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('تعديل'), findsOneWidget);
 
@@ -1899,6 +2585,7 @@ void main() {
     await tester.enterText(find.byType(TextField).last, 'secret123');
     await tester.tap(find.text('I agree to Soul '));
     await tester.pump();
+    await tester.ensureVisible(find.text('Sign up'));
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
 
@@ -1978,7 +2665,7 @@ void main() {
 
     expect(find.text('جديد'), findsOneWidget);
     expect(find.text('الالعاب'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('الملف'), findsOneWidget);
   });
 
   testWidgets('forgot password routes to reset password request screen', (
@@ -2040,6 +2727,7 @@ void main() {
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('تسجيل الخروج'), findsOneWidget);
 
@@ -2055,5 +2743,84 @@ void main() {
 
     expect(find.text('Let’s dive into your account!'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
+  });
+
+  testWidgets('compact phone renders login screen without overflow', (
+    WidgetTester tester,
+  ) async {
+    await _pumpRouteAtSize(
+      tester,
+      route: AppRoutes.login,
+      size: const Size(320, 568),
+    );
+
+    expect(find.text('Welcome back 👋'), findsOneWidget);
+    expect(find.text('Log in'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact phone renders chat inbox without overflow', (
+    WidgetTester tester,
+  ) async {
+    await _pumpRouteAtSize(
+      tester,
+      route: AppRoutes.chatInbox,
+      size: const Size(320, 568),
+    );
+
+    expect(find.text('المحادثات'), findsOneWidget);
+    expect(find.text('الاصدقاء'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact phone renders post screen without overflow', (
+    WidgetTester tester,
+  ) async {
+    await _pumpRouteAtSize(
+      tester,
+      route: AppRoutes.post,
+      size: const Size(320, 568),
+    );
+
+    expect(find.text('الجميع'), findsOneWidget);
+    expect(find.bySemanticsLabel('post-compose-button'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'compact phone renders wallet and shipping screens without overflow',
+    (WidgetTester tester) async {
+      await _pumpRouteAtSize(
+        tester,
+        route: AppRoutes.profileWallet,
+        size: const Size(320, 568),
+      );
+
+      expect(find.text('محفظتي'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('profile-wallet-contact')),
+      );
+      await tester.tap(find.byKey(const ValueKey('profile-wallet-contact')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('وكالة الشحن'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('tablet width renders live screen without overflow', (
+    WidgetTester tester,
+  ) async {
+    await _pumpRouteAtSize(
+      tester,
+      route: AppRoutes.live,
+      size: const Size(800, 1280),
+    );
+
+    expect(find.text('بث مباشر'), findsOneWidget);
+    expect(find.byKey(const ValueKey('live-room-card-0')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

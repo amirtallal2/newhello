@@ -1,0 +1,4 @@
+-- HalloParty profile pickers + equipped appearance update
+-- Date: 2026-05-07
+-- No database schema change is required.
+-- The update uses the existing user_store_inventory table and is_equipped field.

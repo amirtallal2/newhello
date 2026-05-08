@@ -1,0 +1,42 @@
+Hallo Party clubs feature update
+================================
+
+تحديث التطبيق:
+1. ملف APK للتجربة:
+   deploy/halloparty_clubs_debug.apk
+2. ثبته على الموبايل أو شغله من Flutter بعد تحديث الكود.
+
+تحديث الباك اند:
+1. ارفع الملف:
+   deploy/halloparty_clubs_backend_update.zip
+2. فك الضغط داخل مسار الموقع الرئيسي:
+   /www/wwwroot/halloparty.online
+3. الملفات التي سيتم تحديثها على السيرفر:
+   backend/api/index.php
+   backend/src/ClubService.php
+   backend/admin/clubs.php
+   backend/admin/common.php
+   backend/admin/assets/style.css
+
+تحديث قاعدة البيانات:
+1. افتح aaPanel ثم Databases ثم phpMyAdmin.
+2. اختار قاعدة بيانات Hallo Party.
+3. افتح Import وارفع الملف:
+   deploy/halloparty_clubs_database_update.sql
+4. نفذ الاستيراد مرة واحدة فقط.
+
+اختبار سريع بعد الرفع:
+1. افتح:
+   https://halloparty.online/api/clubs
+   المفروض يرجع JSON فيه clubs.
+2. افتح لوحة التحكم:
+   https://halloparty.online/admin/clubs.php
+   المفروض تظهر صفحة إدارة النوادي.
+3. من التطبيق افتح الرئيسية ثم زر النوادي.
+4. جرّب إنشاء نادي جديد، ثم افتحه، ثم جرّب الانضمام/المغادرة من حساب آخر.
+
+ملاحظات مهمة:
+1. رفع صور النوادي يحتاج أن يكون مجلد backend/storage قابل للكتابة من مستخدم الويب www.
+2. لو ظهرت مشكلة في رفع الصور من إنشاء النادي، راجع صلاحيات:
+   /www/wwwroot/halloparty.online/backend/storage
+3. قيمة إنشاء النادي المسجلة في الداتا بيز هي 500000 ماس، والتطبيق يعرضها في زر الإنشاء طبقاً لتصميم الفيجما.

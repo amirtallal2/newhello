@@ -62,6 +62,7 @@ class ProfileStoreScreen extends StatelessWidget {
       labelAlignment: Alignment.topLeft,
       labelPadding: EdgeInsets.only(top: 14, left: 15),
       iconOffset: Offset(-20, 8),
+      routeName: AppRoutes.profileStoreAristocracy,
     ),
   ];
 
@@ -167,7 +168,10 @@ class _StoreCategoryCard extends StatelessWidget {
         child: InkWell(
           key: ValueKey('profile-store-category-${category.label}'),
           onTap: () {
-            final routeName = category.routeName ?? AppRoutes.bootstrap;
+            final routeName = category.routeName;
+            if (routeName == null) {
+              return;
+            }
             Navigator.of(context).pushNamed(routeName);
           },
           borderRadius: BorderRadius.circular(15),

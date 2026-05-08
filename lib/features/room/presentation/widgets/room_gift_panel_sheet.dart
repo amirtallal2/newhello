@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../app/router/app_router.dart';
+import '../../../../core/widgets/resolved_image.dart';
 import '../../data/room_gift_repository.dart';
 import '../controllers/room_session_controller.dart';
 
@@ -13,13 +18,19 @@ class RoomGiftPanelSheet extends StatefulWidget {
 }
 
 class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
-  int? _selectedGiftIndex;
+  int? _selectedGiftId;
   int _selectedRecipientIndex = 0;
-  int _selectedQuantity = 100;
+  int _selectedQuantity = 1;
   bool _isQuantityPickerOpen = false;
   bool _isRecipientSelectorExpanded = false;
   bool _isLoading = true;
   bool _isSending = false;
+  RoomGiftItemData? _activeGiftEffect;
+  int _activeGiftQuantity = 1;
+  Timer? _giftEffectTimer;
+  final AudioPlayer _giftAudioPlayer = AudioPlayer();
+  final Set<String> _preloadedGiftVisualPaths = <String>{};
+  String? _preparedGiftSoundPath;
   _GiftRecipientMode _recipientMode = _GiftRecipientMode.roomUsers;
   late final FixedExtentScrollController _quantityController;
   RoomGiftPanelData _panelData = const RoomGiftPanelData(
@@ -87,12 +98,14 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
   );
 
   static const List<String> _tabs = [
+    'الكل',
     'VIP',
     'المحظوظ',
     'متحرك',
     'اعلام',
     'الهداية عادية',
   ];
+  String _selectedTab = _tabs.first;
 
   @override
   void initState() {
@@ -105,11 +118,38 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
 
   @override
   void dispose() {
+    _giftEffectTimer?.cancel();
+    unawaited(_giftAudioPlayer.dispose());
     _quantityController.dispose();
     super.dispose();
   }
 
-  bool get _hasSelectedGift => _selectedGiftIndex != null;
+  bool get _hasSelectedGift => _selectedGiftId != null;
+
+  List<RoomGiftItemData> get _visibleGifts {
+    if (_selectedTab == 'الكل') {
+      return _panelData.gifts;
+    }
+
+    return _panelData.gifts
+        .where((gift) => gift.category.trim() == _selectedTab)
+        .toList();
+  }
+
+  RoomGiftItemData? get _selectedGift {
+    final selectedGiftId = _selectedGiftId;
+    if (selectedGiftId == null) {
+      return null;
+    }
+
+    for (final gift in _panelData.gifts) {
+      if (gift.id == selectedGiftId) {
+        return gift;
+      }
+    }
+
+    return null;
+  }
 
   Future<void> _loadPanel() async {
     try {
@@ -123,6 +163,7 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
         _panelData = panelData;
         _isLoading = false;
       });
+      _precachePanelGifts(panelData.gifts);
     } catch (_) {
       if (!mounted) {
         return;
@@ -133,9 +174,18 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
     }
   }
 
-  void _handleGiftTap(int index) {
+  void _handleTabTap(String tab) {
     setState(() {
-      _selectedGiftIndex = index;
+      _selectedTab = tab;
+      _selectedGiftId = null;
+      _isQuantityPickerOpen = false;
+    });
+  }
+
+  void _handleGiftTap(RoomGiftItemData gift) {
+    _warmGiftMedia(gift);
+    setState(() {
+      _selectedGiftId = gift.id;
       _isQuantityPickerOpen = false;
     });
   }
@@ -172,11 +222,21 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
     });
   }
 
+  void _openWallet() {
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pushNamed(AppRoutes.profileWallet);
+      }
+    });
+  }
+
   Future<void> _sendSelectedGift() async {
-    final selectedGiftIndex = _selectedGiftIndex;
-    if (selectedGiftIndex == null || selectedGiftIndex >= _panelData.gifts.length) {
+    final selectedGift = _selectedGift;
+    if (selectedGift == null) {
       return;
     }
+    _warmGiftMedia(selectedGift);
 
     setState(() {
       _isSending = true;
@@ -185,7 +245,7 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
     try {
       final updatedPanel = await RoomGiftRepository.instance.sendGift(
         roomId: RoomSessionController.instance.activeRoomId,
-        giftId: _panelData.gifts[selectedGiftIndex].id,
+        giftId: selectedGift.id,
         quantity: _selectedQuantity,
         recipientMode: _recipientMode == _GiftRecipientMode.roomUsers
             ? 'room_users'
@@ -202,9 +262,10 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
         _isQuantityPickerOpen = false;
         _isSending = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم ارسال الهدية')),
-      );
+      _showGiftEffect(selectedGift, quantity: _selectedQuantity);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم ارسال الهدية')));
     } catch (error) {
       if (!mounted) {
         return;
@@ -213,13 +274,111 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
         _isSending = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
       );
     }
   }
 
+  void _showGiftEffect(RoomGiftItemData gift, {int quantity = 1}) {
+    _giftEffectTimer?.cancel();
+    _warmGiftMedia(gift);
+    setState(() {
+      _activeGiftEffect = gift;
+      _activeGiftQuantity = quantity;
+    });
+    unawaited(_playGiftSound(gift.soundPath));
+
+    _giftEffectTimer = Timer(
+      Duration(milliseconds: gift.effectDurationMs.clamp(600, 8000).toInt()),
+      () {
+        if (!mounted || _activeGiftEffect?.id != gift.id) {
+          return;
+        }
+        setState(() {
+          _activeGiftEffect = null;
+        });
+      },
+    );
+  }
+
+  Future<void> _playGiftSound(String soundPath) async {
+    final path = soundPath.trim();
+    if (path.isEmpty) {
+      return;
+    }
+
+    try {
+      if (_preparedGiftSoundPath == path) {
+        await _giftAudioPlayer.seek(Duration.zero);
+        await _giftAudioPlayer.resume();
+        return;
+      }
+
+      await _giftAudioPlayer.stop();
+      if (path.startsWith('assets/')) {
+        await _giftAudioPlayer.play(
+          AssetSource(path.replaceFirst(RegExp(r'^assets/'), '')),
+        );
+      } else {
+        await _giftAudioPlayer.play(UrlSource(resolveMediaUrl(path)));
+      }
+      _preparedGiftSoundPath = path;
+    } catch (_) {}
+  }
+
+  void _precachePanelGifts(List<RoomGiftItemData> gifts) {
+    for (final gift in gifts) {
+      _warmGiftMedia(gift, prepareSound: false);
+    }
+  }
+
+  void _warmGiftMedia(RoomGiftItemData gift, {bool prepareSound = true}) {
+    _precacheGiftVisual(gift.assetPath);
+    _precacheGiftVisual(gift.effectAssetPath);
+
+    if (prepareSound) {
+      unawaited(_prepareGiftSound(gift.soundPath));
+    }
+  }
+
+  void _precacheGiftVisual(String path) {
+    final resolvedPath = path.trim();
+    if (resolvedPath.isEmpty || !_preloadedGiftVisualPaths.add(resolvedPath)) {
+      return;
+    }
+
+    unawaited(precacheResolvedImage(context, resolvedPath));
+  }
+
+  Future<void> _prepareGiftSound(String soundPath) async {
+    final path = soundPath.trim();
+    if (path.isEmpty || _preparedGiftSoundPath == path) {
+      return;
+    }
+
+    try {
+      if (path.startsWith('assets/')) {
+        await _giftAudioPlayer.setSource(
+          AssetSource(path.replaceFirst(RegExp(r'^assets/'), '')),
+        );
+      } else {
+        await _giftAudioPlayer.setSource(UrlSource(resolveMediaUrl(path)));
+      }
+      _preparedGiftSoundPath = path;
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final panelHeight = math
+        .min(screenSize.height - 64, math.max(340.0, screenSize.height * 0.54))
+        .toDouble();
+    final horizontalPadding = screenSize.width < 360 ? 14.0 : 20.0;
+    final visibleGifts = _visibleGifts;
+
     return Semantics(
       label: 'room-gift-panel',
       child: Material(
@@ -240,7 +399,7 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
                 children: [
                   Container(
                     width: double.infinity,
-                    height: 294,
+                    height: panelHeight,
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.vertical(
@@ -248,13 +407,19 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
                       ),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        12,
+                        horizontalPadding,
+                        16,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _GiftPanelHeader(
                             tabs: _tabs,
-                            selectedTab: _tabs.last,
+                            selectedTab: _selectedTab,
+                            onTabTap: _handleTabTap,
                             onCloseTap: () => Navigator.of(context).pop(),
                           ),
                           SizedBox(
@@ -275,40 +440,72 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
                                         _GiftQuantityRail(
                                           controller: _quantityController,
                                           selectedQuantity: _selectedQuantity,
-                                          onSelectedQuantityChanged: (
-                                            quantity,
-                                          ) {
-                                            setState(() {
-                                              _selectedQuantity = quantity;
-                                            });
-                                          },
+                                          onSelectedQuantityChanged:
+                                              (quantity) {
+                                                setState(() {
+                                                  _selectedQuantity = quantity;
+                                                });
+                                              },
                                         ),
                                         const SizedBox(width: 18),
                                       ],
                                       Expanded(
-                                        child: GridView.builder(
-                                          padding: EdgeInsets.zero,
-                                          physics:
-                                              const NeverScrollableScrollPhysics(),
-                                          itemCount: _panelData.gifts.length,
-                                          gridDelegate:
-                                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                                crossAxisCount: 4,
-                                                mainAxisSpacing: 12,
-                                                crossAxisSpacing: 18,
-                                                childAspectRatio: 0.63,
+                                        child: visibleGifts.isEmpty
+                                            ? const Center(
+                                                child: Text(
+                                                  'لا توجد هدايا في هذا القسم',
+                                                  style: TextStyle(
+                                                    color: Color(0xFF285F98),
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              )
+                                            : LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final crossAxisCount = math
+                                                      .max(
+                                                        3,
+                                                        math.min(
+                                                          5,
+                                                          (constraints.maxWidth /
+                                                                  82)
+                                                              .floor(),
+                                                        ),
+                                                      )
+                                                      .toInt();
+                                                  return GridView.builder(
+                                                    padding: EdgeInsets.zero,
+                                                    itemCount:
+                                                        visibleGifts.length,
+                                                    gridDelegate:
+                                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                                          crossAxisCount:
+                                                              crossAxisCount,
+                                                          mainAxisSpacing: 12,
+                                                          crossAxisSpacing: 12,
+                                                          childAspectRatio:
+                                                              0.64,
+                                                        ),
+                                                    itemBuilder: (context, index) {
+                                                      final gift =
+                                                          visibleGifts[index];
+                                                      return _GiftItemCard(
+                                                        semanticLabel:
+                                                            'room-gift-item-$index',
+                                                        gift: gift,
+                                                        isSelected:
+                                                            gift.id ==
+                                                            _selectedGiftId,
+                                                        onTap: () =>
+                                                            _handleGiftTap(
+                                                              gift,
+                                                            ),
+                                                      );
+                                                    },
+                                                  );
+                                                },
                                               ),
-                                          itemBuilder: (context, index) {
-                                            return _GiftItemCard(
-                                              semanticLabel:
-                                                  'room-gift-item-$index',
-                                              gift: _panelData.gifts[index],
-                                              isSelected:
-                                                  index == _selectedGiftIndex,
-                                              onTap: () => _handleGiftTap(index),
-                                            );
-                                          },
-                                        ),
                                       ),
                                     ],
                                   ),
@@ -321,6 +518,7 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
                             onQuantityTap: _toggleQuantityPicker,
                             walletBalance: _panelData.walletCoinsBalance,
                             onSendTap: _sendSelectedGift,
+                            onWalletTap: _openWallet,
                             isSendEnabled:
                                 _hasSelectedGift && !_isLoading && !_isSending,
                             isSending: _isSending,
@@ -366,6 +564,15 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
                 ],
               ),
             ),
+            if (_activeGiftEffect != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: _RoomGiftEffectOverlay(
+                    gift: _activeGiftEffect!,
+                    quantity: _activeGiftQuantity,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -376,7 +583,7 @@ class _RoomGiftPanelSheetState extends State<RoomGiftPanelSheet> {
 Future<void> showRoomGiftPanelSheet(BuildContext context) {
   return showGeneralDialog<void>(
     context: context,
-    barrierLabel: 'room-gift-panel',
+    barrierLabel: 'room-gift-panel-dismiss',
     barrierDismissible: true,
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 180),
@@ -397,15 +604,224 @@ Future<void> showRoomGiftPanelSheet(BuildContext context) {
   );
 }
 
+class _RoomGiftEffectOverlay extends StatelessWidget {
+  const _RoomGiftEffectOverlay({required this.gift, required this.quantity});
+
+  final RoomGiftItemData gift;
+  final int quantity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned(
+          right: 18,
+          left: 72,
+          bottom: 330,
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey('room-gift-toast-${gift.id}-$quantity'),
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 340),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset((1 - value) * 70, 0),
+                  child: child,
+                ),
+              );
+            },
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Container(
+                height: 52,
+                padding: const EdgeInsetsDirectional.fromSTEB(8, 5, 10, 5),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xE61B2431), Color(0xCC285F98)],
+                    begin: Alignment.centerRight,
+                    end: Alignment.centerLeft,
+                  ),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.24),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'تم إرسال ${gift.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 42,
+                      height: 42,
+                      child: ResolvedImage(
+                        path: gift.assetPath,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Center(
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey('room-gift-burst-${gift.id}-$quantity'),
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 880),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) {
+              final scale =
+                  0.72 + (math.sin(value * math.pi) * 0.2) + value * 0.1;
+              return Opacity(
+                opacity: value.clamp(0.0, 1.0),
+                child: Transform.translate(
+                  offset: Offset(0, -16 * value),
+                  child: Transform.scale(scale: scale, child: child),
+                ),
+              );
+            },
+            child: SizedBox(
+              width: 252,
+              height: 252,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  const _RoomGiftParticle(angle: -2.4, distance: 106, size: 9),
+                  const _RoomGiftParticle(angle: -1.3, distance: 116, size: 12),
+                  const _RoomGiftParticle(angle: -0.3, distance: 108, size: 8),
+                  const _RoomGiftParticle(angle: 0.8, distance: 112, size: 10),
+                  const _RoomGiftParticle(angle: 2.1, distance: 118, size: 7),
+                  Container(
+                    width: 194,
+                    height: 194,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.32),
+                          Colors.white.withValues(alpha: 0.08),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 164,
+                    height: 164,
+                    child: ResolvedImage(
+                      path: gift.effectAssetPath,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 28,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xF2FFCE37),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        child: Text(
+                          'x$quantity',
+                          textDirection: TextDirection.ltr,
+                          style: const TextStyle(
+                            color: Color(0xFF1C2530),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoomGiftParticle extends StatelessWidget {
+  const _RoomGiftParticle({
+    required this.angle,
+    required this.distance,
+    required this.size,
+  });
+
+  final double angle;
+  final double distance;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 920),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: (1 - value * 0.72).clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(
+              math.cos(angle) * distance * value,
+              math.sin(angle) * distance * value,
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFD646),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFFD646).withValues(alpha: 0.55),
+              blurRadius: 14,
+            ),
+          ],
+        ),
+        child: SizedBox(width: size, height: size),
+      ),
+    );
+  }
+}
+
 class _GiftPanelHeader extends StatelessWidget {
   const _GiftPanelHeader({
     required this.tabs,
     required this.selectedTab,
+    required this.onTabTap,
     required this.onCloseTap,
   });
 
   final List<String> tabs;
   final String selectedTab;
+  final ValueChanged<String> onTabTap;
   final VoidCallback onCloseTap;
 
   @override
@@ -440,32 +856,43 @@ class _GiftPanelHeader extends StatelessWidget {
                   children: tabs.reversed.map((tab) {
                     final isSelected = tab == selectedTab;
                     return Padding(
-                      padding: const EdgeInsets.only(left: 15),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            tab,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? const Color(0xFF285F98)
-                                  : const Color(0xFF9DB2CE),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
+                      padding: const EdgeInsets.only(left: 12),
+                      child: GestureDetector(
+                        onTap: () => onTabTap(tab),
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 4,
                           ),
-                          const SizedBox(height: 4),
-                          Container(
-                            width: isSelected ? 76 : 0,
-                            height: 1,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(0xFF285F98)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(5),
-                            ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                tab,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? const Color(0xFF285F98)
+                                      : const Color(0xFF9DB2CE),
+                                  fontSize: 14,
+                                  height: 1,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Container(
+                                width: isSelected ? 48 : 0,
+                                height: 2,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? const Color(0xFF285F98)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     );
                   }).toList(),
@@ -809,16 +1236,16 @@ class _GiftQuantityRail extends StatelessWidget {
       label: 'room-gift-quantity-picker',
       child: SizedBox(
         key: const ValueKey('room-gift-quantity-picker'),
-        width: 44,
+        width: 58,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.circular(10),
           child: Stack(
             children: [
               Container(color: const Color(0xFF285F98)),
               ListWheelScrollView.useDelegate(
                 controller: controller,
                 physics: const FixedExtentScrollPhysics(),
-                itemExtent: 18,
+                itemExtent: 28,
                 perspective: 0.003,
                 diameterRatio: 1000,
                 squeeze: 1,
@@ -835,7 +1262,7 @@ class _GiftQuantityRail extends StatelessWidget {
                         '$quantity',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: isSelected ? 7 : 5,
+                          fontSize: isSelected ? 13 : 10,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -846,7 +1273,7 @@ class _GiftQuantityRail extends StatelessWidget {
               IgnorePointer(
                 child: Align(
                   alignment: Alignment.topCenter,
-                  child: Container(height: 22, color: const Color(0x80C3C3CE)),
+                  child: Container(height: 30, color: const Color(0x80C3C3CE)),
                 ),
               ),
             ],
@@ -886,16 +1313,17 @@ class _GiftItemCard extends StatelessWidget {
                 : null,
             borderRadius: BorderRadius.circular(5),
           ),
-          padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+          padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
           child: Column(
             children: [
-              Image.asset(
-                gift.assetPath,
-                width: 50,
-                height: 50,
+              ResolvedImage(
+                path: gift.assetPath,
+                width: 56,
+                height: 56,
+                fit: BoxFit.contain,
                 filterQuality: FilterQuality.high,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               Text(
                 gift.name,
                 maxLines: 1,
@@ -910,7 +1338,8 @@ class _GiftItemCard extends StatelessWidget {
                       offset: Offset(2, 2),
                     ),
                   ],
-                  fontSize: 7,
+                  fontSize: 11,
+                  height: 1.05,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -929,20 +1358,38 @@ class _GiftItemCard extends StatelessWidget {
                           offset: Offset(2, 2),
                         ),
                       ],
-                      fontSize: 8,
+                      fontSize: 11,
+                      height: 1,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(width: 3),
                   Image.asset(
                     'assets/images/room_coin_small_icon.png',
-                    width: 10,
-                    height: 10,
+                    width: 13,
+                    height: 13,
                     filterQuality: FilterQuality.high,
                   ),
                 ],
               ),
-              const SizedBox(height: 3),
+              if (gift.isAnimated || gift.hasSound)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (gift.isAnimated)
+                      const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color(0xFF285F98),
+                        size: 10,
+                      ),
+                    if (gift.hasSound)
+                      const Icon(
+                        Icons.volume_up_rounded,
+                        color: Color(0xFF285F98),
+                        size: 10,
+                      ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -959,6 +1406,7 @@ class _GiftPanelFooter extends StatelessWidget {
     required this.onQuantityTap,
     required this.walletBalance,
     required this.onSendTap,
+    required this.onWalletTap,
     required this.isSendEnabled,
     required this.isSending,
   });
@@ -969,6 +1417,7 @@ class _GiftPanelFooter extends StatelessWidget {
   final VoidCallback onQuantityTap;
   final int walletBalance;
   final VoidCallback onSendTap;
+  final VoidCallback onWalletTap;
   final bool isSendEnabled;
   final bool isSending;
 
@@ -986,13 +1435,13 @@ class _GiftPanelFooter extends StatelessWidget {
               onTap: onQuantityTap,
               behavior: HitTestBehavior.opaque,
               child: SizedBox(
-                width: 80,
-                height: 23,
+                width: 96,
+                height: 40,
                 child: Row(
                   children: [
                     Expanded(
                       child: Container(
-                        height: 23,
+                        height: 40,
                         decoration: const BoxDecoration(
                           color: Color(0xFF285F98),
                           borderRadius: BorderRadius.horizontal(
@@ -1002,15 +1451,15 @@ class _GiftPanelFooter extends StatelessWidget {
                         alignment: Alignment.center,
                         child: Image.asset(
                           'assets/images/room_gift_inventory_icon.png',
-                          width: 15,
-                          height: 15,
+                          width: 20,
+                          height: 20,
                           filterQuality: FilterQuality.high,
                         ),
                       ),
                     ),
                     Expanded(
                       child: Container(
-                        height: 23,
+                        height: 40,
                         decoration: const BoxDecoration(
                           color: Color(0xFF285F98),
                           borderRadius: BorderRadius.horizontal(
@@ -1028,7 +1477,7 @@ class _GiftPanelFooter extends StatelessWidget {
                                 softWrap: false,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 7,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   shadows: [
                                     Shadow(
@@ -1045,7 +1494,7 @@ class _GiftPanelFooter extends StatelessWidget {
                                   ? Icons.keyboard_arrow_up_rounded
                                   : Icons.keyboard_arrow_down_rounded,
                               color: Colors.white,
-                              size: 10,
+                              size: 18,
                             ),
                           ],
                         ),
@@ -1057,7 +1506,7 @@ class _GiftPanelFooter extends StatelessWidget {
             ),
           )
         else
-          const SizedBox(width: 80),
+          const SizedBox(width: 96),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1070,8 +1519,8 @@ class _GiftPanelFooter extends StatelessWidget {
                   onTap: isSending ? null : onSendTap,
                   behavior: HitTestBehavior.opaque,
                   child: Container(
-                    width: 64,
-                    height: 23,
+                    width: 92,
+                    height: 40,
                     decoration: BoxDecoration(
                       color: const Color(0xFF1F9254),
                       borderRadius: BorderRadius.circular(5),
@@ -1079,10 +1528,10 @@ class _GiftPanelFooter extends StatelessWidget {
                     alignment: Alignment.center,
                     child: isSending
                         ? const SizedBox(
-                            width: 10,
-                            height: 10,
+                            width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(
-                              strokeWidth: 1.6,
+                              strokeWidth: 2,
                               color: Colors.white,
                             ),
                           )
@@ -1090,7 +1539,7 @@ class _GiftPanelFooter extends StatelessWidget {
                             'ارسال',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 8,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1099,48 +1548,58 @@ class _GiftPanelFooter extends StatelessWidget {
               ),
               const SizedBox(width: 8),
             ],
-            Container(
-              width: 85,
-              height: 23,
-              decoration: BoxDecoration(
-                color: const Color(0xFF285F98),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    '+',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
+            Semantics(
+              label: 'room-gift-wallet',
+              button: true,
+              child: GestureDetector(
+                key: const ValueKey('room-gift-wallet'),
+                onTap: onWalletTap,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 132,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF285F98),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$walletBalance \$',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 7,
-                      fontWeight: FontWeight.w600,
-                      shadows: [
-                        Shadow(
-                          color: Color(0x40000000),
-                          blurRadius: 4,
-                          offset: Offset(2, 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.add_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          '$walletBalance \$',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            shadows: [
+                              Shadow(
+                                color: Color(0x40000000),
+                                blurRadius: 4,
+                                offset: Offset(2, 2),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 6),
+                      Image.asset(
+                        'assets/images/room_coin_large_icon.png',
+                        width: 20,
+                        height: 20,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Image.asset(
-                    'assets/images/room_coin_large_icon.png',
-                    width: 15,
-                    height: 15,
-                    filterQuality: FilterQuality.high,
-                  ),
-                ],
+                ),
               ),
             ),
           ],

@@ -6,11 +6,15 @@
 - API للغرف الصوتية وطلبات المايك
 - API للهدايا داخل الغرف والمحفظة
 - API للموسيقى داخل الغرفة وقائمة التشغيل
+- API لمركز الدعم الفني ورفع المرفقات
+- API لوكالات الشحن والبحث فيها
 - قاعدة بيانات للمستخدمين والتسجيلات المعلقة والتوكنز
 - قاعدة بيانات للغرف الصوتية وطلبات المايك
 - قاعدة بيانات للهدايا والمحافظ وسجل الإرسال
 - قاعدة بيانات لمكتبة الموسيقى وقوائم تشغيل الغرف
-- لوحة تحكم أدمن لإدارة المستخدمين والغرف والهدايا
+- قاعدة بيانات لتذاكر الدعم ومرفقاتها
+- قاعدة بيانات لوكالات الشحن
+- لوحة تحكم أدمن لإدارة المستخدمين والغرف والهدايا والموسيقى والدعم ووكالات الشحن
 
 ## التشغيل السريع
 
@@ -74,6 +78,8 @@ APP_DB_DRIVER=sqlite php -S 127.0.0.1:8080 backend/router.php
 - `GET /api/gifts/catalog`
 - `GET /api/music/catalog?source=friends|whatsapp`
 - `GET /api/wallet/summary`
+- `GET /api/shipping-agencies?query=...`
+- `POST /api/support/tickets`
 - `GET /api/rooms/{id}/gifts/received`
 - `POST /api/rooms/{id}/gifts/send`
 - `GET /api/rooms/{id}/music/playlist`
@@ -90,4 +96,7 @@ APP_DB_DRIVER=sqlite php -S 127.0.0.1:8080 backend/router.php
 - `/admin/gifts.php`
 - `/admin/gift-transactions.php`
 - `/admin/music-tracks.php`
+- `/admin/shipping-agencies.php`
+- `/admin/support-tickets.php`
+- `/admin/support-ticket.php?id=...`
 - `/admin/room.php?id=...` ويتضمن إدارة قائمة الموسيقى للغرفة

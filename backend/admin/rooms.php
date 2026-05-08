@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/common.php';
+require_once __DIR__ . '/../src/ApiException.php';
+require_once __DIR__ . '/../src/RoomRtcService.php';
 require_once __DIR__ . '/../src/RoomService.php';
 
 admin_require_auth();
 $pdo = admin_pdo();
+$roomRtcService = new RoomRtcService($pdo, $config);
 $roomService = new RoomService($pdo);
 $search = trim((string) ($_GET['search'] ?? ''));
 
@@ -23,11 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'updated_at' => gmdate('Y-m-d H:i:s'),
             'id' => $roomId,
         ]);
+
+        if ($action === 'hide') {
+            $roomRtcService->adminCloseRoomAudio($roomId);
+        }
     }
 
     admin_redirect('/admin/rooms.php' . ($search !== '' ? '?search=' . urlencode($search) : ''));
 }
 
+$roomRtcService->refreshAudioPresence();
 $rooms = $roomService->adminListRooms($search);
 
 admin_render_header('إدارة الغرف الصوتية', 'rooms');
@@ -44,11 +52,16 @@ admin_render_header('إدارة الغرف الصوتية', 'rooms');
         <thead>
             <tr>
                 <th>ID</th>
+                <th>الصورة</th>
                 <th>الكارت</th>
                 <th>عنوان الغرفة</th>
+                <th>النوع</th>
+                <th>البلد</th>
                 <th>المضيف</th>
                 <th>المايكات</th>
                 <th>المستمعون</th>
+                <th>الصوت المباشر</th>
+                <th>المتصلون الآن</th>
                 <th>طلبات المايك</th>
                 <th>الحالة</th>
                 <th>إجراءات</th>
@@ -58,11 +71,20 @@ admin_render_header('إدارة الغرف الصوتية', 'rooms');
         <?php foreach ($rooms as $room): ?>
             <tr>
                 <td>#<?= (int) $room['id'] ?></td>
+                <td><?= admin_render_media_preview((string) ($room['card_image_asset'] ?? ''), (string) ($room['room_title'] ?? 'room')) ?></td>
                 <td><a href="/admin/room.php?id=<?= (int) $room['id'] ?>"><?= htmlspecialchars((string) $room['card_title']) ?></a></td>
                 <td><?= htmlspecialchars((string) $room['room_title']) ?></td>
+                <td><?= htmlspecialchars((string) ($room['room_type'] ?? 'غناء')) ?></td>
+                <td><?= htmlspecialchars((string) ($room['country_label'] ?? 'مصر')) ?></td>
                 <td><?= htmlspecialchars((string) $room['host_name']) ?></td>
                 <td><?= (int) $room['mic_count'] ?></td>
                 <td><?= (int) $room['listener_count'] ?></td>
+                <td>
+                    <span class="pill <?= !empty($room['audio_enabled']) ? 'pill-success' : 'pill-danger' ?>">
+                        <?= !empty($room['audio_enabled']) ? 'مفعل' : 'مغلق' ?>
+                    </span>
+                </td>
+                <td><?= (int) ($room['active_audio_participants_count'] ?? 0) ?></td>
                 <td><?= (int) $room['pending_requests_count'] ?></td>
                 <td>
                     <span class="pill <?= $room['status'] === 'active' ? 'pill-success' : 'pill-danger' ?>">

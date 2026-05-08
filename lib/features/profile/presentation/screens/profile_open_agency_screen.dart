@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../data/profile_agency_repository.dart';
 
 class ProfileOpenAgencyScreen extends StatefulWidget {
   const ProfileOpenAgencyScreen({super.key});
@@ -19,11 +22,14 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
   final TextEditingController _agencyNameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
+  final ProfileAgencyRepository _repository = ProfileAgencyRepository.instance;
 
   String _selectedCountry = '';
-  bool _avatarEdited = false;
-  bool _frontIdUploaded = false;
-  bool _backIdUploaded = false;
+  AgencyAssetDraft? _avatarDraft;
+  AgencyAssetDraft? _frontIdDraft;
+  AgencyAssetDraft? _backIdDraft;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -92,13 +98,101 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
     }
   }
 
-  void _submitReview() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم ارسال المراجعة بنجاح'),
-        behavior: SnackBarBehavior.floating,
-      ),
+  Future<void> _pickImage({
+    required bool isAvatar,
+    required bool isFrontId,
+  }) async {
+    final file = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
     );
+
+    if (file == null) {
+      return;
+    }
+
+    final bytes = await file.readAsBytes();
+    if (!mounted) {
+      return;
+    }
+
+    final draft = AgencyAssetDraft(
+      fileName: file.name,
+      mimeType: _inferMimeType(file.name),
+      bytes: bytes,
+    );
+
+    setState(() {
+      if (isAvatar) {
+        _avatarDraft = draft;
+      } else if (isFrontId) {
+        _frontIdDraft = draft;
+      } else {
+        _backIdDraft = draft;
+      }
+    });
+  }
+
+  Future<void> _submitReview() async {
+    final agencyName = _agencyNameController.text.trim();
+    final phone = _phoneController.text.trim();
+    final address = _addressController.text.trim();
+
+    if (agencyName.isEmpty ||
+        _selectedCountry.isEmpty ||
+        phone.isEmpty ||
+        address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اكمل بيانات الوكالة أولًا.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final receipt = await _repository.submitOpenRequest(
+        agencyName: agencyName,
+        country: _selectedCountry,
+        phone: phone,
+        address: address,
+        avatar: _avatarDraft,
+        frontId: _frontIdDraft,
+        backId: _backIdDraft,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم ارسال المراجعة بنجاح: ${receipt.requestCode}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   @override
@@ -170,7 +264,9 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
                         child: Icon(
                           Icons.person,
                           size: 44,
-                          color: _avatarEdited ? Colors.white : _primaryBlue,
+                          color: _avatarDraft != null
+                              ? Colors.white
+                              : _primaryBlue,
                         ),
                       ),
                       Positioned(
@@ -180,11 +276,8 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
                           label: 'profile-open-agency-avatar-edit',
                           button: true,
                           child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _avatarEdited = !_avatarEdited;
-                              });
-                            },
+                            onTap: () =>
+                                _pickImage(isAvatar: true, isFrontId: false),
                             borderRadius: BorderRadius.circular(12),
                             child: Container(
                               width: 24,
@@ -332,26 +425,20 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
                     Expanded(
                       child: _IdentityUploadCard(
                         label: 'بطاقة الهوية الامامية',
-                        isUploaded: _frontIdUploaded,
+                        isUploaded: _frontIdDraft != null,
                         semanticsLabel: 'profile-open-agency-upload-front',
-                        onTap: () {
-                          setState(() {
-                            _frontIdUploaded = !_frontIdUploaded;
-                          });
-                        },
+                        onTap: () =>
+                            _pickImage(isAvatar: false, isFrontId: true),
                       ),
                     ),
                     const SizedBox(width: 15),
                     Expanded(
                       child: _IdentityUploadCard(
                         label: 'بطاقة الهوية الخلفية',
-                        isUploaded: _backIdUploaded,
+                        isUploaded: _backIdDraft != null,
                         semanticsLabel: 'profile-open-agency-upload-back',
-                        onTap: () {
-                          setState(() {
-                            _backIdUploaded = !_backIdUploaded;
-                          });
-                        },
+                        onTap: () =>
+                            _pickImage(isAvatar: false, isFrontId: false),
                       ),
                     ),
                   ],
@@ -361,7 +448,8 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
                   label: 'profile-open-agency-submit',
                   button: true,
                   child: InkWell(
-                    onTap: _submitReview,
+                    key: const ValueKey('profile-open-agency-submit'),
+                    onTap: _isSubmitting ? null : _submitReview,
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       height: 40,
@@ -370,9 +458,9 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
-                      child: const Text(
-                        'ارسال المراجعة',
-                        style: TextStyle(
+                      child: Text(
+                        _isSubmitting ? 'جارٍ الإرسال...' : 'ارسال المراجعة',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
@@ -388,6 +476,17 @@ class _ProfileOpenAgencyScreenState extends State<ProfileOpenAgencyScreen> {
       ),
     );
   }
+}
+
+String _inferMimeType(String fileName) {
+  final lower = fileName.toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+  if (lower.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  return 'image/png';
 }
 
 class _SectionLabel extends StatelessWidget {

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/resolved_image.dart';
+import '../../data/chat_repository.dart';
+
 class ChatSelectionScreen extends StatefulWidget {
   const ChatSelectionScreen({super.key});
 
@@ -14,48 +17,52 @@ class _ChatSelectionScreenState extends State<ChatSelectionScreen> {
   static const Color _surface = Color(0xFFF6F6F6);
   static const Color _disabledAction = Color(0xFFC7C7CC);
 
-  final Set<int> _selectedIndexes = <int>{0};
+  final Set<int> _selectedThreadIds = <int>{};
+  late Future<List<ChatThreadData>> _future;
 
-  static const List<_SelectableThreadData> _threads = [
-    _SelectableThreadData(
-      title: 'محمد احمد',
-      preview: 'كيف حالك يارب ان تكون بخير ؟؟',
-      date: '11/16/19',
-      statusColor: Color(0xFF34A853),
-      initiallySelected: true,
-    ),
-    _SelectableThreadData(
-      title: 'محمد احمد',
-      preview: 'كيف حالك يارب ان تكون بخير ؟؟',
-      date: '11/16/19',
-      statusColor: Color(0xFFEA4335),
-    ),
-    _SelectableThreadData(
-      title: 'محمد احمد',
-      preview: 'كيف حالك يارب ان تكون بخير ؟؟',
-      date: '11/16/19',
-      statusColor: Color(0xFF34A853),
-    ),
-    _SelectableThreadData(
-      title: 'محمد احمد',
-      preview: 'كيف حالك يارب ان تكون بخير ؟؟',
-      date: '11/16/19',
-      statusColor: Color(0xFF34A853),
-    ),
-    _SelectableThreadData(
-      title: 'محمد احمد',
-      preview: 'كيف حالك يارب ان تكون بخير ؟؟',
-      date: '11/16/19',
-      statusColor: Color(0xFF34A853),
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _future = ChatRepository.instance.loadSelectionThreads();
+  }
 
-  void _toggleSelection(int index) {
+  Future<void> _refresh() async {
+    final future = ChatRepository.instance.loadSelectionThreads();
     setState(() {
-      if (_selectedIndexes.contains(index)) {
-        _selectedIndexes.remove(index);
+      _future = future;
+    });
+    await future;
+  }
+
+  Future<void> _runBulkAction(String action) async {
+    if (_selectedThreadIds.isEmpty) {
+      return;
+    }
+    try {
+      await ChatRepository.instance.bulkAction(
+        threadIds: _selectedThreadIds.toList(),
+        action: action,
+      );
+      setState(() {
+        _selectedThreadIds.clear();
+        _future = ChatRepository.instance.loadSelectionThreads();
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  void _toggleSelection(int threadId) {
+    setState(() {
+      if (_selectedThreadIds.contains(threadId)) {
+        _selectedThreadIds.remove(threadId);
       } else {
-        _selectedIndexes.add(index);
+        _selectedThreadIds.add(threadId);
       }
     });
   }
@@ -67,119 +74,150 @@ class _ChatSelectionScreenState extends State<ChatSelectionScreen> {
       body: SafeArea(
         top: false,
         bottom: false,
-        child: Column(
-          children: [
-            Container(
-              height: 140,
-              color: Colors.white,
-              padding: const EdgeInsets.fromLTRB(16, 54, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      final navigator = Navigator.of(context);
-                      if (navigator.canPop()) {
-                        navigator.pop();
-                      }
-                    },
-                    child: const Text(
-                      'موافقة',
-                      style: TextStyle(
-                        color: _primaryBlue,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        height: 1.29,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  const Text(
-                    'المحادثات',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                      letterSpacing: -0.23,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Container(
-                color: const Color(0xFFEFEFF4),
-                child: ListView.separated(
-                  padding: EdgeInsets.zero,
-                  itemCount: _threads.length,
-                  separatorBuilder: (context, _) => const Divider(
-                    height: 1,
-                    thickness: 0.33,
-                    indent: 118,
-                    color: _separator,
-                  ),
-                  itemBuilder: (context, index) {
-                    final thread = _threads[index];
-                    return _SelectionRow(
-                      data: thread,
-                      isSelected: _selectedIndexes.contains(index),
-                      onTap: () => _toggleSelection(index),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Container(
-              height: 83,
-              color: _surface,
-              child: Stack(
-                children: [
-                  const Positioned(
-                    top: 17,
-                    right: 16,
-                    child: Text(
-                      'مسح',
-                      style: TextStyle(
-                        color: _disabledAction,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ),
-                  const Positioned(
-                    top: 17,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Text(
-                        'قرائة الكل',
-                        style: TextStyle(
-                          color: _disabledAction,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: -0.4,
+        child: FutureBuilder<List<ChatThreadData>>(
+          future: _future,
+          builder: (context, snapshot) {
+            final threads = snapshot.data ?? const <ChatThreadData>[];
+            final hasSelection = _selectedThreadIds.isNotEmpty;
+
+            return Column(
+              children: [
+                Container(
+                  height: 140,
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(16, 54, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          final navigator = Navigator.of(context);
+                          if (navigator.canPop()) {
+                            navigator.pop();
+                          }
+                        },
+                        child: const Text(
+                          'موافقة',
+                          style: TextStyle(
+                            color: _primaryBlue,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            height: 1.29,
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 121,
-                    right: 120,
-                    bottom: 9,
-                    child: Container(
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: _primaryBlue,
-                        borderRadius: BorderRadius.circular(100),
+                      const SizedBox(height: 15),
+                      const Text(
+                        'المحادثات',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                          letterSpacing: -0.23,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+                Expanded(
+                  child: snapshot.connectionState != ConnectionState.done
+                      ? const Center(child: CircularProgressIndicator())
+                      : Container(
+                          color: const Color(0xFFEFEFF4),
+                          child: RefreshIndicator(
+                            color: _primaryBlue,
+                            onRefresh: _refresh,
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: EdgeInsets.zero,
+                              itemCount: threads.length,
+                              separatorBuilder: (context, _) => const Divider(
+                                height: 1,
+                                thickness: 0.33,
+                                indent: 118,
+                                color: _separator,
+                              ),
+                              itemBuilder: (context, index) {
+                                final thread = threads[index];
+                                return _SelectionRow(
+                                  data: thread,
+                                  isSelected: _selectedThreadIds.contains(
+                                    thread.id,
+                                  ),
+                                  onTap: () => _toggleSelection(thread.id),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                ),
+                Container(
+                  height: 83,
+                  color: _surface,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 17,
+                        right: 16,
+                        child: GestureDetector(
+                          onTap: hasSelection
+                              ? () => _runBulkAction('delete')
+                              : null,
+                          child: Text(
+                            'مسح',
+                            style: TextStyle(
+                              color: hasSelection
+                                  ? const Color(0xFFB45A5A)
+                                  : _disabledAction,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 17,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: hasSelection
+                                ? () => _runBulkAction('mark_read')
+                                : null,
+                            child: Text(
+                              'قرائة الكل',
+                              style: TextStyle(
+                                color: hasSelection
+                                    ? _primaryBlue
+                                    : _disabledAction,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w400,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 121,
+                        right: 120,
+                        bottom: 9,
+                        child: Container(
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: _primaryBlue,
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -193,7 +231,7 @@ class _SelectionRow extends StatelessWidget {
     required this.onTap,
   });
 
-  final _SelectableThreadData data;
+  final ChatThreadData data;
   final bool isSelected;
   final VoidCallback onTap;
 
@@ -208,7 +246,7 @@ class _SelectionRow extends StatelessWidget {
         child: Row(
           children: [
             Text(
-              data.date,
+              data.messageDateLabel,
               style: const TextStyle(
                 color: _ChatSelectionScreenState._mutedText,
                 fontSize: 14,
@@ -239,7 +277,7 @@ class _SelectionRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    data.preview,
+                    data.previewText,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
@@ -257,7 +295,7 @@ class _SelectionRow extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                const _SelectionAvatar(),
+                _SelectionAvatar(avatarAsset: data.avatarAsset),
                 Positioned(
                   right: 0,
                   bottom: 0,
@@ -265,7 +303,7 @@ class _SelectionRow extends StatelessWidget {
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: data.statusColor,
+                      color: _selectionColor(data.statusColorHex),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
                     ),
@@ -283,7 +321,9 @@ class _SelectionRow extends StatelessWidget {
 }
 
 class _SelectionAvatar extends StatelessWidget {
-  const _SelectionAvatar();
+  const _SelectionAvatar({required this.avatarAsset});
+
+  final String avatarAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -298,7 +338,10 @@ class _SelectionAvatar extends StatelessWidget {
           end: Alignment.bottomCenter,
         ),
       ),
-      child: const Icon(Icons.person_rounded, color: Colors.white, size: 28),
+      clipBehavior: Clip.antiAlias,
+      child: avatarAsset.trim().isNotEmpty
+          ? ResolvedImage(path: avatarAsset, fit: BoxFit.cover)
+          : const Icon(Icons.person_rounded, color: Colors.white, size: 28),
     );
   }
 }
@@ -333,18 +376,8 @@ class _SelectionCircle extends StatelessWidget {
   }
 }
 
-class _SelectableThreadData {
-  const _SelectableThreadData({
-    required this.title,
-    required this.preview,
-    required this.date,
-    required this.statusColor,
-    this.initiallySelected = false,
-  });
-
-  final String title;
-  final String preview;
-  final String date;
-  final Color statusColor;
-  final bool initiallySelected;
+Color _selectionColor(String hex) {
+  final normalized = hex.replaceFirst('#', '');
+  final value = int.tryParse(normalized, radix: 16) ?? 0x34A853;
+  return Color(0xFF000000 | value);
 }

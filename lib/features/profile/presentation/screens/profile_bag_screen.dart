@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/resolved_image.dart';
+import '../../data/profile_economy_repository.dart';
 import '../../../home/presentation/widgets/main_bottom_navigation.dart';
 
 class ProfileBagScreen extends StatefulWidget {
@@ -14,14 +16,208 @@ class _ProfileBagScreenState extends State<ProfileBagScreen> {
   static const Color _secondaryBlue = Color(0xFF9DB2CE);
 
   static const List<String> _tabs = ['الاطارات المتحركة', 'رسم', 'الدخلات'];
+  static const Map<String, String> _tabGroups = <String, String>{
+    'الاطارات المتحركة': 'animated',
+    'رسم': 'art',
+    'الدخلات': 'entry_effects',
+  };
 
-  final List<_BagItemData> _items = List<_BagItemData>.generate(
-    4,
-    (_) => const _BagItemData(),
-  );
+  final ProfileEconomyRepository _economyRepository =
+      ProfileEconomyRepository.instance;
 
   String _activeTab = _tabs.first;
-  int? _selectedItemIndex;
+  List<BagInventoryItemData> _items = const <BagInventoryItemData>[];
+  int? _selectedInventoryId;
+  bool _isBusy = false;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  String get _activeGroup => _tabGroups[_activeTab] ?? 'animated';
+
+  BagInventoryItemData? get _selectedItem {
+    for (final item in _items) {
+      if (item.id == _selectedInventoryId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _loadItems() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final items = await _economyRepository.loadBagItems(group: _activeGroup);
+      if (!mounted) {
+        return;
+      }
+
+      int? nextSelectedInventoryId = _selectedInventoryId;
+      final hasSelectedItem = items.any(
+        (item) => item.id == nextSelectedInventoryId,
+      );
+      if (!hasSelectedItem) {
+        nextSelectedInventoryId = _firstEquippedItemId(items);
+      }
+
+      setState(() {
+        _items = items;
+        _selectedInventoryId = nextSelectedInventoryId;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _equipSelectedItem() async {
+    final selectedItem = _selectedItem;
+    if (_isBusy || selectedItem == null) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      await _economyRepository.equipBagItem(inventoryId: selectedItem.id);
+      if (!mounted) {
+        return;
+      }
+      await _loadItems();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم استخدام العنصر')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _unequipSelectedItem() async {
+    final selectedItem = _selectedItem;
+    if (_isBusy || selectedItem == null) {
+      return;
+    }
+
+    if (!selectedItem.isEquipped) {
+      setState(() {
+        _selectedInventoryId = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      await _economyRepository.unequipBagItem(inventoryId: selectedItem.id);
+      if (!mounted) {
+        return;
+      }
+      await _loadItems();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم الغاء استخدام العنصر')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _removeSelectedItem() async {
+    final selectedItem = _selectedItem;
+    if (_isBusy || selectedItem == null) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      await _economyRepository.removeBagItem(inventoryId: selectedItem.id);
+      if (!mounted) {
+        return;
+      }
+      await _loadItems();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم إزالة العنصر')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  int? _firstEquippedItemId(List<BagInventoryItemData> items) {
+    for (final item in items) {
+      if (item.isEquipped) {
+        return item.id;
+      }
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,166 +229,202 @@ class _ProfileBagScreenState extends State<ProfileBagScreen> {
         child: Column(
           children: [
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 70, 18, 24),
-                child: Directionality(
-                  textDirection: TextDirection.rtl,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Semantics(
-                              label: 'profile-bag-back',
-                              button: true,
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.of(context).pop();
-                                },
-                                borderRadius: BorderRadius.circular(19),
-                                child: Container(
-                                  width: 38,
-                                  height: 37,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFFB4D1EF),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.arrow_forward_rounded,
-                                    color: _primaryBlue,
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const Text(
-                            'حقيبتي',
-                            style: TextStyle(
-                              color: _primaryBlue,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 60),
-                      Row(
-                        children: _tabs
-                            .map(
-                              (tab) => Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7.5,
-                                  ),
-                                  child: _BagTabButton(
-                                    label: tab,
-                                    isActive: _activeTab == tab,
-                                    onTap: () {
-                                      setState(() {
-                                        _activeTab = tab;
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 20),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          const spacing = 20.0;
-                          final cardWidth =
-                              (constraints.maxWidth - spacing) / 2;
-
-                          return Wrap(
-                            spacing: spacing,
-                            runSpacing: 20,
-                            children: List.generate(_items.length, (index) {
-                              return SizedBox(
-                                width: cardWidth,
-                                child: _BagItemCard(
-                                  index: index,
-                                  isSelected: _selectedItemIndex == index,
+              child: RefreshIndicator(
+                color: _primaryBlue,
+                onRefresh: _loadItems,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 70, 18, 24),
+                  child: Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Semantics(
+                                label: 'profile-bag-back',
+                                button: true,
+                                child: InkWell(
                                   onTap: () {
-                                    setState(() {
-                                      _selectedItemIndex = index;
-                                    });
+                                    Navigator.of(context).pop();
                                   },
-                                  onUseTap: () {
-                                    setState(() {
-                                      _selectedItemIndex = index;
-                                    });
-                                  },
-                                  onCancelTap: () {
-                                    setState(() {
-                                      if (_selectedItemIndex == index) {
-                                        _selectedItemIndex = null;
-                                      }
-                                    });
-                                  },
+                                  borderRadius: BorderRadius.circular(19),
+                                  child: Container(
+                                    width: 38,
+                                    height: 37,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFB4D1EF),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: _primaryBlue,
+                                      size: 24,
+                                    ),
+                                  ),
                                 ),
+                              ),
+                            ),
+                            const Text(
+                              'حقيبتي',
+                              style: TextStyle(
+                                color: _primaryBlue,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 60),
+                        Row(
+                          children: _tabs
+                              .map(
+                                (tab) => Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7.5,
+                                    ),
+                                    child: _BagTabButton(
+                                      label: tab,
+                                      isActive: _activeTab == tab,
+                                      onTap: () {
+                                        setState(() {
+                                          _activeTab = tab;
+                                          _selectedInventoryId = null;
+                                        });
+                                        _loadItems();
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                        const SizedBox(height: 20),
+                        if (_isLoading)
+                          const SizedBox(
+                            height: 220,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_errorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 48),
+                            child: Column(
+                              children: [
+                                Text(
+                                  _errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: _primaryBlue,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton(
+                                  onPressed: _loadItems,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _primaryBlue,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: const Text('إعادة المحاولة'),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (_items.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 48),
+                            child: Text(
+                              'لا توجد عناصر في هذا القسم حتى الآن',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _primaryBlue,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          )
+                        else
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              const spacing = 20.0;
+                              final cardWidth =
+                                  (constraints.maxWidth - spacing) / 2;
+
+                              return Wrap(
+                                spacing: spacing,
+                                runSpacing: 20,
+                                children: List.generate(_items.length, (index) {
+                                  final item = _items[index];
+                                  return SizedBox(
+                                    width: cardWidth,
+                                    child: _BagItemCard(
+                                      item: item,
+                                      index: index,
+                                      isSelected:
+                                          item.id == _selectedInventoryId,
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedInventoryId = item.id;
+                                        });
+                                      },
+                                      onUseTap: () {
+                                        setState(() {
+                                          _selectedInventoryId = item.id;
+                                        });
+                                        _equipSelectedItem();
+                                      },
+                                      onCancelTap: () {
+                                        setState(() {
+                                          _selectedInventoryId = item.id;
+                                        });
+                                        _unequipSelectedItem();
+                                      },
+                                    ),
+                                  );
+                                }),
                               );
-                            }),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _BottomActionButton(
-                              buttonKey: const ValueKey('profile-bag-wear'),
-                              label: 'ارتداء',
-                              backgroundColor: const Color(0xFF23D9BF),
-                              onTap: () {
-                                if (_selectedItemIndex == null) {
-                                  return;
-                                }
-                              },
-                            ),
+                            },
                           ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: _BottomActionButton(
-                              buttonKey: const ValueKey('profile-bag-finish'),
-                              label: 'انهاء',
-                              backgroundColor: const Color(0xFFE99F40),
-                              onTap: () {
-                                if (_selectedItemIndex == null) {
-                                  return;
-                                }
-                                setState(() {
-                                  _selectedItemIndex = null;
-                                });
-                              },
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _BottomActionButton(
+                                buttonKey: const ValueKey('profile-bag-wear'),
+                                label: 'ارتداء',
+                                backgroundColor: const Color(0xFF23D9BF),
+                                onTap: _equipSelectedItem,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: _BottomActionButton(
-                              buttonKey: const ValueKey('profile-bag-remove'),
-                              label: 'ازالة',
-                              backgroundColor: const Color(0xFFE86043),
-                              onTap: () {
-                                if (_selectedItemIndex == null) {
-                                  return;
-                                }
-                                setState(() {
-                                  _items.removeAt(_selectedItemIndex!);
-                                  _selectedItemIndex = null;
-                                });
-                              },
+                            const SizedBox(width: 20),
+                            Expanded(
+                              child: _BottomActionButton(
+                                buttonKey: const ValueKey('profile-bag-finish'),
+                                label: 'انهاء',
+                                backgroundColor: const Color(0xFFE99F40),
+                                onTap: _unequipSelectedItem,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(width: 20),
+                            Expanded(
+                              child: _BottomActionButton(
+                                buttonKey: const ValueKey('profile-bag-remove'),
+                                label: 'ازالة',
+                                backgroundColor: const Color(0xFFE86043),
+                                onTap: _removeSelectedItem,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -244,6 +476,7 @@ class _BagTabButton extends StatelessWidget {
 
 class _BagItemCard extends StatelessWidget {
   const _BagItemCard({
+    required this.item,
     required this.index,
     required this.isSelected,
     required this.onTap,
@@ -251,6 +484,7 @@ class _BagItemCard extends StatelessWidget {
     required this.onCancelTap,
   });
 
+  final BagInventoryItemData item;
   final int index;
   final bool isSelected;
   final VoidCallback onTap;
@@ -297,9 +531,9 @@ class _BagItemCard extends StatelessWidget {
                     filterQuality: FilterQuality.high,
                   ),
                   const SizedBox(width: 9),
-                  const Text(
-                    '7 أيام',
-                    style: TextStyle(
+                  Text(
+                    '${item.durationDays} أيام',
+                    style: const TextStyle(
                       color: _ProfileBagScreenState._primaryBlue,
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
@@ -308,7 +542,7 @@ class _BagItemCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 5),
-              const _BagItemPreview(),
+              _BagItemPreview(item: item),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -338,10 +572,26 @@ class _BagItemCard extends StatelessWidget {
 }
 
 class _BagItemPreview extends StatelessWidget {
-  const _BagItemPreview();
+  const _BagItemPreview({required this.item});
+
+  final BagInventoryItemData item;
+
+  bool get _usesAvatarOverlay {
+    return item.categoryKey == 'frames' || item.categoryKey == 'chat_frames';
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (!_usesAvatarOverlay) {
+      return ResolvedImage(
+        path: item.previewAssetPath,
+        width: 100,
+        height: 95,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      );
+    }
+
     return SizedBox(
       width: 100,
       height: 95,
@@ -361,8 +611,8 @@ class _BagItemPreview extends StatelessWidget {
             ),
           ),
           Positioned.fill(
-            child: Image.asset(
-              'assets/images/profile_store_frames_preview_overlay.png',
+            child: ResolvedImage(
+              path: item.previewAssetPath,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.high,
             ),
@@ -447,8 +697,4 @@ class _BottomActionButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _BagItemData {
-  const _BagItemData();
 }

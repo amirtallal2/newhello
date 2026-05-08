@@ -10,7 +10,7 @@ class VoiceLiveApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Voice Live',
+      title: 'Hallo Party',
       theme: AppTheme.light(),
       initialRoute: AppRoutes.splash,
       onGenerateRoute: AppRouter.onGenerateRoute,

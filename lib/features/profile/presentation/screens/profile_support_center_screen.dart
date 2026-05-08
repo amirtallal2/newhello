@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../data/profile_support_repository.dart';
 
 class ProfileSupportCenterScreen extends StatefulWidget {
   const ProfileSupportCenterScreen({super.key});
@@ -13,8 +16,15 @@ class _ProfileSupportCenterScreenState
   static const Color _primaryBlue = Color(0xFF285F98);
   static const Color _inactiveBlue = Color(0xFF9DB2CE);
 
-  String _selectedCategory = 'اعادة الشحن';
+  final ProfileSupportRepository _repository =
+      ProfileSupportRepository.instance;
   final TextEditingController _descriptionController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
+  final List<SupportAttachmentDraft?> _attachments =
+      List<SupportAttachmentDraft?>.filled(3, null);
+
+  String _selectedCategory = 'اعادة الشحن';
+  bool _isSubmitting = false;
 
   static const List<String> _categories = [
     'مشكلة تطبيق',
@@ -169,13 +179,15 @@ class _ProfileSupportCenterScreenState
                         'الرجاء ارسال لقطة من الشاشة لحل المشكلة ! (اختياري)',
                       ),
                       const SizedBox(height: 20),
-                      const Row(
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _UploadPlaceholder(index: 3),
-                          _UploadPlaceholder(index: 2),
-                          _UploadPlaceholder(index: 1),
-                        ],
+                        children: List<Widget>.generate(3, (index) {
+                          return _UploadPlaceholder(
+                            index: index + 1,
+                            attachment: _attachments[index],
+                            onTap: () => _pickAttachment(index),
+                          );
+                        }).reversed.toList(),
                       ),
                       const SizedBox(height: 20),
                       Center(
@@ -184,7 +196,7 @@ class _ProfileSupportCenterScreenState
                           height: 38,
                           child: ElevatedButton(
                             key: const ValueKey('profile-support-submit'),
-                            onPressed: () {},
+                            onPressed: _isSubmitting ? null : _submitTicket,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _primaryBlue,
                               foregroundColor: Colors.white,
@@ -193,9 +205,11 @@ class _ProfileSupportCenterScreenState
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                            child: const Text(
-                              'ارسال الان المشكلة',
-                              style: TextStyle(
+                            child: Text(
+                              _isSubmitting
+                                  ? 'جارٍ ارسال المشكلة...'
+                                  : 'ارسال الان المشكلة',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -212,6 +226,97 @@ class _ProfileSupportCenterScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _pickAttachment(int index) async {
+    final file = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+
+    if (file == null) {
+      return;
+    }
+
+    final bytes = await file.readAsBytes();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _attachments[index] = SupportAttachmentDraft(
+        fileName: file.name,
+        mimeType: _inferMimeType(file.name),
+        bytes: bytes,
+      );
+    });
+  }
+
+  Future<void> _submitTicket() async {
+    final description = _descriptionController.text.trim();
+    if (description.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('اكتب وصف المشكلة أولًا.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final receipt = await _repository.submitSupportTicket(
+        category: _selectedCategory,
+        description: description,
+        attachments: _attachments.whereType<SupportAttachmentDraft>().toList(),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _descriptionController.clear();
+      setState(() {
+        for (var index = 0; index < _attachments.length; index++) {
+          _attachments[index] = null;
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'تم إرسال التذكرة بنجاح: ${receipt.ticketCode}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  String _inferMimeType(String fileName) {
+    final normalized = fileName.toLowerCase();
+    if (normalized.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (normalized.endsWith('.webp')) {
+      return 'image/webp';
+    }
+
+    return 'image/jpeg';
   }
 }
 
@@ -285,38 +390,56 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _UploadPlaceholder extends StatelessWidget {
-  const _UploadPlaceholder({required this.index});
+  const _UploadPlaceholder({
+    required this.index,
+    required this.attachment,
+    required this.onTap,
+  });
 
   final int index;
+  final SupportAttachmentDraft? attachment;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       label: 'profile-support-upload-$index',
       button: true,
-      child: Container(
-        width: 100,
-        height: 100,
-        decoration: BoxDecoration(
-          color: const Color(0x80C9D9EE),
-          borderRadius: BorderRadius.circular(5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x40000000),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: const Text(
-          '+',
-          style: TextStyle(
-            color: _ProfileSupportCenterScreenState._primaryBlue,
-            fontSize: 35,
-            fontWeight: FontWeight.w500,
-            height: 1,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(5),
+        child: Container(
+          width: 100,
+          height: 100,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: const Color(0x80C9D9EE),
+            borderRadius: BorderRadius.circular(5),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x40000000),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
+          alignment: Alignment.center,
+          child: attachment == null
+              ? const Text(
+                  '+',
+                  style: TextStyle(
+                    color: _ProfileSupportCenterScreenState._primaryBlue,
+                    fontSize: 35,
+                    fontWeight: FontWeight.w500,
+                    height: 1,
+                  ),
+                )
+              : Image.memory(
+                  attachment!.bytes,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                ),
         ),
       ),
     );

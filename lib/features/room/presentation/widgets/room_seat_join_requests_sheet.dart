@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/layout/responsive.dart';
+import '../../../../core/widgets/resolved_image.dart';
 import '../../data/room_repository.dart';
 import '../controllers/room_session_controller.dart';
 
@@ -39,6 +41,8 @@ class _RoomSeatJoinRequestsDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -58,95 +62,103 @@ class _RoomSeatJoinRequestsDialog extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(25),
               ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 416,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    const Text(
-                      'طلب الانضمام الي المقعد',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    Expanded(
-                      child: FutureBuilder<List<RoomSeatRequestData>>(
-                        future: RoomSessionController.instance.loadSeatRequests(
-                          seatNumber,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: metrics.sheetMaxHeight(0.70, minHeight: 320),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Column(
+                    children: [
+                      SizedBox(height: metrics.spacing(20, min: 14, max: 20)),
+                      Text(
+                        'طلب الانضمام الي المقعد',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: metrics.font(15, min: 13, max: 16),
+                          fontWeight: FontWeight.w500,
                         ),
-                        builder: (context, snapshot) {
-                          final requests = snapshot.data;
-                          final displayRequests =
-                              requests != null && requests.isNotEmpty
-                              ? requests
-                              : List<RoomSeatRequestData>.generate(
-                                  4,
-                                  (index) => RoomSeatRequestData(
-                                    id: index + 1,
-                                    roomId:
-                                        RoomSessionController
-                                            .instance
-                                            .activeRoomId,
-                                    seatNumber: seatNumber,
-                                    requesterName: 'Mohammed Ahmed',
-                                    requesterAvatarAsset:
-                                        'assets/images/profile_avatar.png',
-                                    status: 'pending',
-                                  ),
-                                );
-
-                          return ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: displayRequests.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 20),
-                            itemBuilder: (context, index) {
-                              final request = displayRequests[index];
-                              return _JoinRequestRow(
-                                rank: index + 1,
-                                name: request.requesterName,
-                                seatNumber: request.seatNumber,
-                                avatarAsset: request.requesterAvatarAsset,
-                              );
-                            },
-                          );
-                        },
                       ),
-                    ),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: Color(0xFFE9E9E9),
-                    ),
-                    Semantics(
-                      label: 'room-seat-join-requests-cancel',
-                      button: true,
-                      child: ExcludeSemantics(
-                        child: InkWell(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: const SizedBox(
-                            height: 58,
-                            width: double.infinity,
-                            child: Center(
-                              child: Text(
-                                'الغاء',
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
+                      SizedBox(height: metrics.spacing(22, min: 16, max: 22)),
+                      Expanded(
+                        child: FutureBuilder<List<RoomSeatRequestData>>(
+                          future: RoomSessionController.instance
+                              .loadSeatRequests(seatNumber),
+                          builder: (context, snapshot) {
+                            final requests = snapshot.data;
+                            final displayRequests =
+                                requests != null && requests.isNotEmpty
+                                ? requests
+                                : List<RoomSeatRequestData>.generate(
+                                    4,
+                                    (index) => RoomSeatRequestData(
+                                      id: index + 1,
+                                      roomId: RoomSessionController
+                                          .instance
+                                          .activeRoomId,
+                                      seatNumber: seatNumber,
+                                      requesterName: 'Mohammed Ahmed',
+                                      requesterAvatarAsset:
+                                          'assets/images/profile_avatar.png',
+                                      status: 'pending',
+                                    ),
+                                  );
+
+                            return ListView.separated(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: metrics.pageHorizontalPadding(
+                                  compact: 12,
+                                  regular: 16,
+                                ),
+                              ),
+                              itemCount: displayRequests.length,
+                              separatorBuilder: (context, index) => SizedBox(
+                                height: metrics.spacing(20, min: 14, max: 20),
+                              ),
+                              itemBuilder: (context, index) {
+                                final request = displayRequests[index];
+                                return _JoinRequestRow(
+                                  rank: index + 1,
+                                  name: request.requesterName,
+                                  seatNumber: request.seatNumber,
+                                  avatarAsset: request.requesterAvatarAsset,
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: Color(0xFFE9E9E9),
+                      ),
+                      Semantics(
+                        label: 'room-seat-join-requests-cancel',
+                        button: true,
+                        child: ExcludeSemantics(
+                          child: InkWell(
+                            onTap: () => Navigator.of(context).pop(),
+                            child: const SizedBox(
+                              height: 58,
+                              width: double.infinity,
+                              child: Center(
+                                child: Text(
+                                  'الغاء',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -172,13 +184,15 @@ class _JoinRequestRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return SizedBox(
-      height: 40,
+      height: metrics.spacing(40, min: 38, max: 44),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: metrics.spacing(40, min: 38, max: 44),
+            height: metrics.spacing(40, min: 38, max: 44),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               color: const Color(0x14285F98),
@@ -186,15 +200,15 @@ class _JoinRequestRow extends StatelessWidget {
             alignment: Alignment.center,
             child: Image.asset(
               'assets/images/room_small_mic_icon.png',
-              width: 20,
-              height: 20,
+              width: metrics.spacing(20, min: 18, max: 22),
+              height: metrics.spacing(20, min: 18, max: 22),
               filterQuality: FilterQuality.high,
             ),
           ),
-          const SizedBox(width: 20),
+          SizedBox(width: metrics.spacing(12, min: 10, max: 20)),
           Container(
-            width: 40,
-            height: 40,
+            width: metrics.spacing(40, min: 38, max: 44),
+            height: metrics.spacing(40, min: 38, max: 44),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               color: const Color(0x14285F98),
@@ -202,38 +216,34 @@ class _JoinRequestRow extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               '$seatNumber',
-              style: const TextStyle(
+              style: TextStyle(
                 color: Color(0xFF285F98),
-                fontSize: 16,
+                fontSize: metrics.font(16, min: 14, max: 17),
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          const SizedBox(width: 20),
+          SizedBox(width: metrics.spacing(12, min: 10, max: 20)),
           Expanded(
             child: Align(
               alignment: Alignment.centerRight,
               child: Text(
                 name,
                 textAlign: TextAlign.right,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.black,
-                  fontSize: 12,
+                  fontSize: metrics.font(12, min: 11, max: 13),
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 20),
+          SizedBox(width: metrics.spacing(12, min: 10, max: 20)),
           Container(
-            width: 40,
-            height: 40,
+            width: metrics.spacing(40, min: 38, max: 44),
+            height: metrics.spacing(40, min: 38, max: 44),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              image: DecorationImage(
-                image: AssetImage(avatarAsset),
-                fit: BoxFit.cover,
-              ),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x33000000),
@@ -242,16 +252,18 @@ class _JoinRequestRow extends StatelessWidget {
                 ),
               ],
             ),
+            clipBehavior: Clip.antiAlias,
+            child: ResolvedImage(path: avatarAsset, fit: BoxFit.cover),
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: metrics.spacing(10, min: 8, max: 14)),
           SizedBox(
-            width: 10,
+            width: metrics.spacing(12, min: 10, max: 14),
             child: Text(
               '$rank',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Color(0xFF285F98),
-                fontSize: 15,
+                fontSize: metrics.font(15, min: 13, max: 16),
                 fontWeight: FontWeight.w500,
               ),
             ),

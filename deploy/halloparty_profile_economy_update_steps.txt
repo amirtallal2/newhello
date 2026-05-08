@@ -1,0 +1,36 @@
+تحديث الحقيبة والمتجر والشحن - 2026-05-07
+
+ملفات التطبيق:
+1. ثبت APK الجديد:
+   deploy/halloparty_profile_economy_debug.apk
+
+ملف تحديث الباك اند:
+1. ارفع الملف التالي على السيرفر:
+   deploy/halloparty_profile_economy_backend_update.zip
+2. فك الضغط داخل مسار الموقع الأساسي الذي يحتوي على مجلد backend.
+3. الملفات التي سيتم تحديثها:
+   backend/src/EconomyService.php
+   backend/src/ReferralService.php
+   backend/admin/store-items.php
+
+ملف تحديث قاعدة البيانات:
+1. افتح aaPanel > Databases > phpMyAdmin.
+2. اختر قاعدة بيانات HalloParty.
+3. افتح Import أو SQL.
+4. شغل الملف:
+   deploy/halloparty_profile_economy_database_update.sql
+5. هذا الملف يضيف عنصر متجر مبدئي لقسم استقراطيه فقط، ولا يحذف أي بيانات.
+
+بعد الرفع:
+1. افتح لوحة الأدمن > عناصر المتجر.
+2. ستجد فئة جديدة باسم استقراطيه.
+3. من التطبيق افتح الملف الشخصي ثم:
+   الحقيبة: تعرض العناصر المشتراة وتدعم ارتداء/إلغاء/إزالة.
+   المتجر: كل الأقسام تفتح صفحات حقيقية، وقسم استقراطيه لم يعد يفتح bootstrap.
+   الشحن: باقات الشحن تعمل، وزر عروض وكلاء الشحن يفتح صفحة وكالات الشحن.
+4. صفحة وكالات الشحن تدعم البحث والسحب للتحديث، والضغط على أي وكالة يفتح خيارات نسخ الاسم أو المعرف.
+
+اختبارات تم تشغيلها محلياً:
+flutter analyze
+flutter test test/widget_test.dart
+flutter build apk --debug --target-platform android-arm64

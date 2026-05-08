@@ -1,0 +1,37 @@
+HalloParty - Profile Pickers + Equipped Appearance Update
+Date: 2026-05-07
+
+Update files
+1. App APK:
+   deploy/halloparty_profile_pickers_appearance_debug.apk
+
+2. Backend update:
+   deploy/halloparty_profile_pickers_appearance_backend_update.zip
+
+3. Database update:
+   deploy/halloparty_profile_pickers_appearance_database_update.sql
+
+What changed
+1. شاشة الإعدادات/التحرير في الملف الشخصي:
+   - الدولة أصبحت اختيار من قائمة دول.
+   - تاريخ الميلاد أصبح اختيار أرقام يوم/شهر/سنة بدون كتابة يدوية.
+
+2. الشارات والإطارات:
+   - الباك اند يرجع العناصر المستخدمة من الحقيبة داخل profile/summary.
+   - الإطار المستخدم يظهر حول صورة الملف الشخصي.
+   - الشارة المستخدمة تظهر بجوار/أسفل صورة الملف الشخصي.
+   - نفس المظهر يظهر في شاشة الملف الشخصي وشاشة التحرير.
+
+How to upload backend
+1. ارفع محتوى zip على السيرفر مع الحفاظ على نفس المسار:
+   backend/src/ProfileService.php
+
+2. لا يوجد SQL مطلوب تنفيذه، ملف SQL مرفق للتوضيح فقط.
+
+How to test
+1. ثبت APK على الموبايل.
+2. افتح الملف الشخصي ثم الإعدادات.
+3. اضغط الدولة واختر دولة من القائمة.
+4. اضغط عيد ميلاد واختر يوم/شهر/سنة ثم أكد.
+5. اشترِ إطار أو شارة من المتجر، افتح الحقيبة، اضغط استخدام.
+6. ارجع للملف الشخصي وتأكد أن الإطار/الشارة ظهرت حول صورة الحساب.

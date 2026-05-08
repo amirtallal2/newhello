@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/ReferralService.php';
+
 final class AuthService
 {
     public function __construct(
@@ -10,10 +12,11 @@ final class AuthService
     ) {
     }
 
-    public function register(string $email, string $password): array
+    public function register(string $email, string $password, string $referralCode = ''): array
     {
         $email = strtolower(trim($email));
         $password = trim($password);
+        $referralCode = strtoupper(preg_replace('/[^A-Z0-9]/', '', strtoupper(trim($referralCode))) ?? '');
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new ApiException('Invalid email address.');
@@ -24,6 +27,7 @@ final class AuthService
         }
 
         $this->deleteExpiredPendingRegistrations();
+        new ReferralService($this->pdo);
 
         if ($this->userExistsByEmail($email)) {
             throw new ApiException('This email is already registered.');
@@ -51,6 +55,7 @@ final class AuthService
                      birthdate = NULL,
                      gender = NULL,
                      country = NULL,
+                     referral_code = :referral_code,
                      expires_at = :expires_at,
                      updated_at = :updated_at
                  WHERE id = :id'
@@ -59,6 +64,7 @@ final class AuthService
                 'password_hash' => password_hash($password, PASSWORD_DEFAULT),
                 'registration_token' => $registrationToken,
                 'email_verification_code' => $verificationCode,
+                'referral_code' => $referralCode !== '' ? $referralCode : null,
                 'expires_at' => $expiresAt,
                 'updated_at' => $now,
                 'id' => $pending['id'],
@@ -66,15 +72,16 @@ final class AuthService
         } else {
             $statement = $this->pdo->prepare(
                 'INSERT INTO pending_registrations
-                    (email, password_hash, registration_token, email_verification_code, expires_at, created_at, updated_at)
+                    (email, password_hash, registration_token, email_verification_code, referral_code, expires_at, created_at, updated_at)
                  VALUES
-                    (:email, :password_hash, :registration_token, :email_verification_code, :expires_at, :created_at, :updated_at)'
+                    (:email, :password_hash, :registration_token, :email_verification_code, :referral_code, :expires_at, :created_at, :updated_at)'
             );
             $statement->execute([
                 'email' => $email,
                 'password_hash' => password_hash($password, PASSWORD_DEFAULT),
                 'registration_token' => $registrationToken,
                 'email_verification_code' => $verificationCode,
+                'referral_code' => $referralCode !== '' ? $referralCode : null,
                 'expires_at' => $expiresAt,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -216,6 +223,7 @@ final class AuthService
         }
 
         $now = $this->now();
+        $referralService = new ReferralService($this->pdo);
         $this->pdo->beginTransaction();
 
         try {
@@ -256,6 +264,11 @@ final class AuthService
                 'updated_at' => $now,
             ]);
 
+            $referralService->registerReferralForNewUser(
+                $userId,
+                (string) ($pending['referral_code'] ?? '')
+            );
+
             $deletePending = $this->pdo->prepare(
                 'DELETE FROM pending_registrations WHERE id = :id'
             );
@@ -295,6 +308,100 @@ final class AuthService
         $user = $statement->fetch();
 
         return $this->authenticateUser($user, $password);
+    }
+
+    public function loginByGoogle(string $idToken): array
+    {
+        $payload = (new GoogleIdTokenVerifier($this->config['google'] ?? []))
+            ->verify($idToken);
+
+        $googleSub = trim((string) ($payload['sub'] ?? ''));
+        $email = strtolower(trim((string) ($payload['email'] ?? '')));
+        $name = trim((string) ($payload['name'] ?? ''));
+        $emailVerified = filter_var($payload['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if ($googleSub === '' || $email === '') {
+            throw new ApiException('Google account data is incomplete.', 401);
+        }
+
+        $user = $this->findUserByGoogleSub($googleSub)
+            ?? $this->findUserByEmail($email);
+
+        $now = $this->now();
+
+        if ($user === null) {
+            $this->pdo->beginTransaction();
+
+            try {
+                $insertUser = $this->pdo->prepare(
+                    'INSERT INTO users
+                        (email, phone, password_hash, nickname, birthdate, gender, country, status, email_verified_at, phone_verified_at, google_sub, auth_provider, created_at, updated_at)
+                     VALUES
+                        (:email, :phone, :password_hash, :nickname, :birthdate, :gender, :country, :status, :email_verified_at, :phone_verified_at, :google_sub, :auth_provider, :created_at, :updated_at)'
+                );
+                $insertUser->execute([
+                    'email' => $email,
+                    'phone' => null,
+                    'password_hash' => password_hash(TokenManager::generate(48), PASSWORD_DEFAULT),
+                    'nickname' => $name !== '' ? $name : strtok($email, '@'),
+                    'birthdate' => null,
+                    'gender' => null,
+                    'country' => null,
+                    'status' => 'active',
+                    'email_verified_at' => $emailVerified ? $now : null,
+                    'phone_verified_at' => null,
+                    'google_sub' => $googleSub,
+                    'auth_provider' => 'google',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+
+                $userId = (int) $this->pdo->lastInsertId();
+                $this->createDefaultWallet($userId, $now);
+
+                $token = $this->createAuthToken($userId);
+                $this->pdo->commit();
+
+                return [
+                    'token' => $token,
+                    'user' => $this->findUserById($userId),
+                ];
+            } catch (Throwable $throwable) {
+                $this->pdo->rollBack();
+                throw $throwable;
+            }
+        }
+
+        if (($user['status'] ?? 'active') !== 'active') {
+            throw new ApiException('This account is suspended.', 403);
+        }
+
+        $statement = $this->pdo->prepare(
+            'UPDATE users
+             SET email = :email,
+                 nickname = :nickname,
+                 google_sub = :google_sub,
+                 auth_provider = :auth_provider,
+                 email_verified_at = COALESCE(email_verified_at, :email_verified_at),
+                 updated_at = :updated_at
+             WHERE id = :id'
+        );
+        $statement->execute([
+            'email' => $email,
+            'nickname' => ($user['nickname'] ?? null) ?: ($name !== '' ? $name : strtok($email, '@')),
+            'google_sub' => $googleSub,
+            'auth_provider' => 'google',
+            'email_verified_at' => $emailVerified ? $now : null,
+            'updated_at' => $now,
+            'id' => $user['id'],
+        ]);
+
+        $token = $this->createAuthToken((int) $user['id']);
+
+        return [
+            'token' => $token,
+            'user' => $this->findUserById((int) $user['id']),
+        ];
     }
 
     public function forgotPassword(string $email): array
@@ -544,6 +651,28 @@ final class AuthService
         return $statement->fetch() !== false;
     }
 
+    private function findUserByEmail(string $email): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT * FROM users WHERE email = :email LIMIT 1'
+        );
+        $statement->execute(['email' => $email]);
+        $row = $statement->fetch();
+
+        return $row === false ? null : $row;
+    }
+
+    private function findUserByGoogleSub(string $googleSub): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT * FROM users WHERE google_sub = :google_sub LIMIT 1'
+        );
+        $statement->execute(['google_sub' => $googleSub]);
+        $row = $statement->fetch();
+
+        return $row === false ? null : $row;
+    }
+
     private function findUserById(int $userId): array
     {
         $statement = $this->pdo->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
@@ -568,9 +697,32 @@ final class AuthService
             'gender' => $user['gender'],
             'country' => $user['country'],
             'status' => $user['status'],
+            'auth_provider' => $user['auth_provider'] ?? 'password',
             'email_verified' => !empty($user['email_verified_at']),
             'phone_verified' => !empty($user['phone_verified_at']),
+            'profile_handle' => $user['profile_handle'] ?? 'Shark.island',
+            'signature_text' => $user['signature_text'] ?? 'ليس لديك المقدمة الشخصية',
+            'avatar_asset' => $user['avatar_asset'] ?? 'assets/images/profile_avatar.png',
+            'agency_id' => isset($user['agency_id']) && $user['agency_id'] !== null ? (int) $user['agency_id'] : null,
+            'agency_role' => $user['agency_role'] ?? null,
         ];
+    }
+
+    private function createDefaultWallet(int $userId, string $now): void
+    {
+        $createWallet = $this->pdo->prepare(
+            'INSERT INTO user_wallets
+                (user_id, coins_balance, diamonds_balance, created_at, updated_at)
+             VALUES
+                (:user_id, :coins_balance, :diamonds_balance, :created_at, :updated_at)'
+        );
+        $createWallet->execute([
+            'user_id' => $userId,
+            'coins_balance' => 1235,
+            'diamonds_balance' => 5,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 
     private function maskEmail(string $email): string

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../../../core/storage/app_launch_store.dart';
 import '../widgets/onboarding_screen_layout.dart';
 
 class OnboardingThirdScreen extends StatelessWidget {
@@ -30,7 +31,12 @@ class OnboardingThirdScreen extends StatelessWidget {
         );
       },
       onContinue: () {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.authEntry);
+        AppLaunchStore.instance.markOnboardingSeen().then((_) {
+          if (!context.mounted) {
+            return;
+          }
+          Navigator.of(context).pushReplacementNamed(AppRoutes.authEntry);
+        });
       },
     );
   }

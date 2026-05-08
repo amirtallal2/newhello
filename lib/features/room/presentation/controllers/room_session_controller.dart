@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../auth/data/auth_flow_store.dart';
 import '../../data/room_repository.dart';
 
 enum RoomUserRole { admin, member }
@@ -20,6 +21,7 @@ final class RoomSessionController {
       ValueNotifier<List<RoomSeatRequestData>>(<RoomSeatRequestData>[]);
   final ValueNotifier<RoomUserRole> currentUserRole =
       ValueNotifier<RoomUserRole>(RoomUserRole.member);
+  bool _hasManualRoleOverride = false;
 
   int _activeRoomId = RoomData.fallback.id;
   int get activeRoomId => _activeRoomId;
@@ -27,13 +29,15 @@ final class RoomSessionController {
   Future<void> loadRoom({int roomId = 1}) async {
     final roomData = await RoomRepository.instance.getRoom(roomId);
     _activeRoomId = roomId;
+    final currentUserId = int.tryParse(
+      AuthFlowStore.instance.currentUser?['id']?.toString() ?? '',
+    );
     final mergedPendingSeats = <int>{
       ...roomData.pendingRequestSeatNumbers,
       ...room.value.pendingRequestSeatNumbers,
       if (pendingMicRequestSeatNumber.value != null)
         pendingMicRequestSeatNumber.value!,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     room.value = roomData.copyWith(
       pendingRequestSeatNumbers: mergedPendingSeats,
     );
@@ -41,6 +45,13 @@ final class RoomSessionController {
     pendingMicRequestSeatNumber.value = mergedPendingSeats.isEmpty
         ? null
         : mergedPendingSeats.first;
+    if (!_hasManualRoleOverride) {
+      currentUserRole.value = currentUserId == null
+          ? RoomUserRole.admin
+          : currentUserId == roomData.hostUserId
+          ? RoomUserRole.admin
+          : RoomUserRole.member;
+    }
   }
 
   void updateMicCount(int count) {
@@ -49,6 +60,7 @@ final class RoomSessionController {
   }
 
   void updateUserRole(RoomUserRole role) {
+    _hasManualRoleOverride = true;
     currentUserRole.value = role;
   }
 
@@ -57,8 +69,7 @@ final class RoomSessionController {
     final pendingSeats = <int>{
       ...room.value.pendingRequestSeatNumbers,
       seatNumber,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     room.value = room.value.copyWith(pendingRequestSeatNumbers: pendingSeats);
   }
 
@@ -107,5 +118,6 @@ final class RoomSessionController {
     pendingMicRequestSeatNumber.value = null;
     seatRequests.value = <RoomSeatRequestData>[];
     currentUserRole.value = RoomUserRole.admin;
+    _hasManualRoleOverride = false;
   }
 }

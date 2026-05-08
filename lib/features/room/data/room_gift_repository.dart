@@ -9,6 +9,10 @@ class RoomGiftItemData {
     required this.category,
     required this.assetPath,
     required this.priceCoins,
+    this.animationPath = '',
+    this.soundPath = '',
+    this.isAnimated = false,
+    this.effectDurationMs = 1800,
   });
 
   final int id;
@@ -16,14 +20,30 @@ class RoomGiftItemData {
   final String category;
   final String assetPath;
   final int priceCoins;
+  final String animationPath;
+  final String soundPath;
+  final bool isAnimated;
+  final int effectDurationMs;
+
+  String get effectAssetPath =>
+      animationPath.trim().isEmpty ? assetPath : animationPath;
+
+  bool get hasSound => soundPath.trim().isNotEmpty;
 
   factory RoomGiftItemData.fromJson(Map<String, dynamic> json) {
     return RoomGiftItemData(
       id: _giftAsInt(json['id'], fallback: 1),
       name: json['name']?.toString() ?? 'الهدية الصغيرة',
       category: json['category']?.toString() ?? 'الهداية عادية',
-      assetPath: json['asset_path']?.toString() ?? 'assets/images/room_gift_1.png',
+      assetPath:
+          json['asset_path']?.toString() ?? 'assets/images/room_gift_1.png',
       priceCoins: _giftAsInt(json['price_coins'], fallback: 10),
+      animationPath: json['animation_path']?.toString() ?? '',
+      soundPath: json['sound_path']?.toString() ?? '',
+      isAnimated:
+          json['is_animated'] == true ||
+          _giftAsInt(json['is_animated'], fallback: 0) == 1,
+      effectDurationMs: _giftAsInt(json['effect_duration_ms'], fallback: 1800),
     );
   }
 }
@@ -49,7 +69,8 @@ class RoomGiftPanelData {
   }) {
     return RoomGiftPanelData(
       walletCoinsBalance: walletCoinsBalance ?? this.walletCoinsBalance,
-      walletDiamondsBalance: walletDiamondsBalance ?? this.walletDiamondsBalance,
+      walletDiamondsBalance:
+          walletDiamondsBalance ?? this.walletDiamondsBalance,
       isGuest: isGuest ?? this.isGuest,
       gifts: gifts ?? this.gifts,
     );
@@ -122,7 +143,10 @@ final class LiveRoomGiftRepository implements RoomGiftRepository {
     final walletData = walletResponse['data'] as Map<String, dynamic>;
 
     return RoomGiftPanelData(
-      walletCoinsBalance: _giftAsInt(walletData['coins_balance'], fallback: 1235),
+      walletCoinsBalance: _giftAsInt(
+        walletData['coins_balance'],
+        fallback: 1235,
+      ),
       walletDiamondsBalance: _giftAsInt(
         walletData['diamonds_balance'],
         fallback: 5,
@@ -330,7 +354,9 @@ final class FakeRoomGiftRepository implements RoomGiftRepository {
       throw ApiException('Insufficient coin balance.');
     }
 
-    _panel = _panel.copyWith(walletCoinsBalance: _panel.walletCoinsBalance - total);
+    _panel = _panel.copyWith(
+      walletCoinsBalance: _panel.walletCoinsBalance - total,
+    );
 
     final senderName =
         AuthFlowStore.instance.currentUser?['nickname']?.toString() ??

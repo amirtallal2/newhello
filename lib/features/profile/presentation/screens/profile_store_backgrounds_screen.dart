@@ -1,16 +1,47 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../../../core/widgets/resolved_image.dart';
+import '../../data/profile_economy_repository.dart';
+import 'profile_store_send_frame_screen.dart';
 import '../../../home/presentation/widgets/main_bottom_navigation.dart';
 
-class ProfileStoreBackgroundsScreen extends StatelessWidget {
+class ProfileStoreBackgroundsScreen extends StatefulWidget {
   const ProfileStoreBackgroundsScreen({super.key});
 
+  @override
+  State<ProfileStoreBackgroundsScreen> createState() =>
+      _ProfileStoreBackgroundsScreenState();
+}
+
+class _ProfileStoreBackgroundsScreenState
+    extends State<ProfileStoreBackgroundsScreen> {
   static const Color _primaryBlue = Color(0xFF285F98);
   static const Color _surfaceGrey = Color(0xFFF4F4F4);
   static const Color _secondaryBlue = Color(0xFF9DB2CE);
+  final ProfileEconomyRepository _economyRepository =
+      ProfileEconomyRepository.instance;
+  List<StoreItemData> _items = const <StoreItemData>[];
 
-  static const int _itemCount = 6;
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final catalog = await _economyRepository.loadStoreCatalog(
+        categoryKey: 'backgrounds',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _items = catalog.items;
+      });
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,43 +97,94 @@ class ProfileStoreBackgroundsScreen extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(17, 10, 17, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: EdgeInsets.only(right: 1, bottom: 11),
-                        child: Text(
-                          'جديد',
-                          style: TextStyle(
-                            color: _primaryBlue,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
+              child: RefreshIndicator(
+                color: _primaryBlue,
+                onRefresh: _loadCatalog,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(17, 10, 17, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(right: 1, bottom: 11),
+                          child: Text(
+                            'جديد',
+                            style: TextStyle(
+                              color: _primaryBlue,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        const spacing = 20.0;
-                        final cardWidth = (constraints.maxWidth - spacing) / 2;
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          const spacing = 20.0;
+                          final cardWidth =
+                              (constraints.maxWidth - spacing) / 2;
 
-                        return Wrap(
-                          spacing: spacing,
-                          runSpacing: 20,
-                          children: List.generate(_itemCount, (index) {
-                            return SizedBox(
-                              width: cardWidth,
-                              child: _BackgroundStoreItemCard(index: index),
-                            );
-                          }),
-                        );
-                      },
-                    ),
-                  ],
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: 20,
+                            children: List.generate(_items.length, (index) {
+                              return SizedBox(
+                                width: cardWidth,
+                                child: _BackgroundStoreItemCard(
+                                  item: _items[index],
+                                  index: index,
+                                  onGiftTap: () {
+                                    Navigator.of(context).pushNamed(
+                                      AppRoutes.profileStoreSendFrame,
+                                      arguments: ProfileStoreSendArgs(
+                                        itemId: _items[index].id,
+                                        itemName: _items[index].name,
+                                        durationDays:
+                                            _items[index].defaultDuration.days,
+                                      ),
+                                    );
+                                  },
+                                  onBuyTap: () async {
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
+                                    try {
+                                      await _economyRepository
+                                          .purchaseStoreItem(
+                                            itemId: _items[index].id,
+                                            durationDays: _items[index]
+                                                .defaultDuration
+                                                .days,
+                                          );
+                                      if (!mounted) {
+                                        return;
+                                      }
+                                      messenger.showSnackBar(
+                                        const SnackBar(
+                                          content: Text('تم شراء العنصر بنجاح'),
+                                        ),
+                                      );
+                                    } catch (error) {
+                                      if (!mounted) {
+                                        return;
+                                      }
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(error.toString()),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                              );
+                            }),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -117,9 +199,17 @@ class ProfileStoreBackgroundsScreen extends StatelessWidget {
 }
 
 class _BackgroundStoreItemCard extends StatelessWidget {
-  const _BackgroundStoreItemCard({required this.index});
+  const _BackgroundStoreItemCard({
+    required this.item,
+    required this.index,
+    required this.onGiftTap,
+    required this.onBuyTap,
+  });
 
+  final StoreItemData item;
   final int index;
+  final VoidCallback onGiftTap;
+  final VoidCallback onBuyTap;
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +226,7 @@ class _BackgroundStoreItemCard extends StatelessWidget {
               const Text(
                 'معاينة',
                 style: TextStyle(
-                  color: ProfileStoreBackgroundsScreen._primaryBlue,
+                  color: _ProfileStoreBackgroundsScreenState._primaryBlue,
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
                 ),
@@ -149,10 +239,10 @@ class _BackgroundStoreItemCard extends StatelessWidget {
                 filterQuality: FilterQuality.high,
               ),
               const SizedBox(width: 9),
-              const Text(
-                '7 أيام',
-                style: TextStyle(
-                  color: ProfileStoreBackgroundsScreen._primaryBlue,
+              Text(
+                '${item.defaultDuration.days} أيام',
+                style: const TextStyle(
+                  color: _ProfileStoreBackgroundsScreenState._primaryBlue,
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
                 ),
@@ -160,19 +250,16 @@ class _BackgroundStoreItemCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 5),
-          const _BackgroundPreviewBox(),
+          _BackgroundPreviewBox(path: item.previewAssetPath),
           const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: _BackgroundStoreActionButton(
                   label: 'ارسال',
-                  backgroundColor: ProfileStoreBackgroundsScreen._secondaryBlue,
-                  onTap: () {
-                    Navigator.of(
-                      context,
-                    ).pushNamed(AppRoutes.profileStoreSendFrame);
-                  },
+                  backgroundColor:
+                      _ProfileStoreBackgroundsScreenState._secondaryBlue,
+                  onTap: onGiftTap,
                 ),
               ),
               const SizedBox(width: 15),
@@ -182,10 +269,9 @@ class _BackgroundStoreItemCard extends StatelessWidget {
                     'profile-store-backgrounds-item-buy-$index',
                   ),
                   label: 'شراء',
-                  backgroundColor: ProfileStoreBackgroundsScreen._primaryBlue,
-                  onTap: () {
-                    Navigator.of(context).pushNamed(AppRoutes.bootstrap);
-                  },
+                  backgroundColor:
+                      _ProfileStoreBackgroundsScreenState._primaryBlue,
+                  onTap: onBuyTap,
                 ),
               ),
             ],
@@ -197,7 +283,9 @@ class _BackgroundStoreItemCard extends StatelessWidget {
 }
 
 class _BackgroundPreviewBox extends StatelessWidget {
-  const _BackgroundPreviewBox();
+  const _BackgroundPreviewBox({required this.path});
+
+  final String path;
 
   static const List<Offset> _seatOffsets = [
     Offset(1, 11),
@@ -224,8 +312,8 @@ class _BackgroundPreviewBox extends StatelessWidget {
               Positioned.fill(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: Image.asset(
-                    'assets/images/profile_store_background_preview.png',
+                  child: ResolvedImage(
+                    path: path,
                     fit: BoxFit.cover,
                     filterQuality: FilterQuality.high,
                   ),
@@ -352,7 +440,7 @@ class _BlueDot extends StatelessWidget {
       width: 4,
       height: 4,
       decoration: const BoxDecoration(
-        color: ProfileStoreBackgroundsScreen._primaryBlue,
+        color: _ProfileStoreBackgroundsScreenState._primaryBlue,
         shape: BoxShape.circle,
       ),
     );

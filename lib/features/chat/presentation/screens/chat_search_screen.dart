@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../data/chat_repository.dart';
 import '../widgets/chat_shared_widgets.dart';
 
 class ChatSearchScreen extends StatefulWidget {
@@ -11,13 +12,73 @@ class ChatSearchScreen extends StatefulWidget {
 }
 
 class _ChatSearchScreenState extends State<ChatSearchScreen> {
-  final List<String> _recentSearches = <String>[
-    'Mo',
-    'Abdullahman Mohamed',
-    'Youssef Sherif',
-  ];
+  final TextEditingController _searchController = TextEditingController();
+  late Future<ChatSearchPayload> _future;
 
-  final String _query = 'Mo';
+  @override
+  void initState() {
+    super.initState();
+    _searchController.text = 'Mo';
+    _future = ChatRepository.instance.loadSearch(query: _searchController.text);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _runSearch(String query) {
+    setState(() {
+      _future = ChatRepository.instance.loadSearch(query: query);
+    });
+  }
+
+  Future<void> _deleteEntry(int searchId) async {
+    final updated = await ChatRepository.instance.deleteSearchEntry(
+      searchId: searchId,
+    );
+    setState(() {
+      _future = Future<ChatSearchPayload>.value(
+        ChatSearchPayload(
+          query: _searchController.text,
+          recentSearches: updated,
+          results: const <ChatThreadData>[],
+        ),
+      );
+    });
+  }
+
+  Future<void> _openRecent(ChatSearchEntryData entry) async {
+    await ChatRepository.instance.rememberSearch(
+      label: entry.label,
+      threadId: entry.targetThreadId,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (entry.targetThreadId == null || entry.targetThreadId! < 1) {
+      _searchController.text = entry.label;
+      _runSearch(entry.label);
+      return;
+    }
+    Navigator.of(
+      context,
+    ).pushNamed(AppRoutes.chatConversation, arguments: entry.targetThreadId);
+  }
+
+  Future<void> _openResult(ChatThreadData thread) async {
+    await ChatRepository.instance.rememberSearch(
+      label: thread.title,
+      threadId: thread.id,
+    );
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(
+      context,
+    ).pushNamed(AppRoutes.chatConversation, arguments: thread.id);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,60 +87,77 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
       body: SafeArea(
         top: false,
         bottom: false,
-        child: Column(
-          children: [
-            const SizedBox(height: 54),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _SearchBar(query: _query),
-            ),
-            const SizedBox(height: 26),
-            Expanded(
-              child: Container(
-                color: Colors.white,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(32, 0, 16, 8),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'عمليات البحث الأخيرة',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                            color: ChatScreenPalette.primaryBlue,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
+        child: FutureBuilder<ChatSearchPayload>(
+          future: _future,
+          builder: (context, snapshot) {
+            final payload = snapshot.data;
+            final recentSearches =
+                payload?.recentSearches ?? const <ChatSearchEntryData>[];
+            final results = payload?.results ?? const <ChatThreadData>[];
+
+            return Column(
+              children: [
+                const SizedBox(height: 54),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _SearchBar(
+                    controller: _searchController,
+                    onChanged: _runSearch,
+                    onSubmitted: _runSearch,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                Expanded(
+                  child: Container(
+                    color: Colors.white,
+                    child: RefreshIndicator(
+                      color: ChatScreenPalette.primaryBlue,
+                      onRefresh: () async => _runSearch(_searchController.text),
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.only(bottom: 24),
+                        children: [
+                          _SearchSectionTitle(
+                            title: 'نتائج البحث',
+                            topPadding: 0,
                           ),
-                        ),
+                          if (snapshot.connectionState != ConnectionState.done)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 42),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else if (results.isEmpty)
+                            const _SearchEmptyState()
+                          else
+                            ...results.map(
+                              (thread) => ChatThreadRow(
+                                title: thread.title,
+                                preview: thread.previewText,
+                                date: thread.messageDateLabel,
+                                avatarAsset: thread.avatarAsset,
+                                isPhotoMessage: thread.isPhotoPreview,
+                                onTap: () => _openResult(thread),
+                              ),
+                            ),
+                          _SearchSectionTitle(
+                            title: 'عمليات البحث الأخيرة',
+                            topPadding: results.isEmpty ? 18 : 28,
+                          ),
+                          ...recentSearches.map(
+                            (entry) => _RecentSearchRow(
+                              label: entry.label,
+                              onTap: () => _openRecent(entry),
+                              onDeleteTap: () => _deleteEntry(entry.id),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    ..._recentSearches.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final value = entry.value;
-
-                      return _RecentSearchRow(
-                        label: value,
-                        onTap: () {
-                          Navigator.of(
-                            context,
-                          ).pushNamed(AppRoutes.chatConversation);
-                        },
-                        onDeleteTap: () {
-                          setState(() {
-                            _recentSearches.removeAt(index);
-                          });
-                        },
-                      );
-                    }),
-                    const Spacer(),
-                    const _KeyboardMock(),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -87,9 +165,15 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
 }
 
 class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.query});
+  const _SearchBar({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
 
-  final String query;
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -105,36 +189,74 @@ class _SearchBar extends StatelessWidget {
           const Icon(Icons.search_rounded, size: 16, color: Color(0xFF2F3036)),
           const SizedBox(width: 12),
           Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: query,
-                      style: const TextStyle(
-                        color: Color(0xFF1F2024),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    const WidgetSpan(child: SizedBox(width: 1)),
-                    const WidgetSpan(
-                      alignment: PlaceholderAlignment.middle,
-                      child: SizedBox(
-                        width: 1.5,
-                        height: 16,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(color: Color(0xFF8062A5)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            child: TextField(
+              key: const ValueKey('chat-search-field'),
+              controller: controller,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.search,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isCollapsed: true,
+                hintText: 'ابحث في المحادثات',
               ),
+              style: const TextStyle(
+                color: Color(0xFF1F2024),
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.left,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SearchSectionTitle extends StatelessWidget {
+  const _SearchSectionTitle({required this.title, required this.topPadding});
+
+  final String title;
+  final double topPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(32, topPadding, 16, 8),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          title,
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            color: ChatScreenPalette.primaryBlue,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchEmptyState extends StatelessWidget {
+  const _SearchEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 30),
+      child: Center(
+        child: Text(
+          'لا توجد نتائج مطابقة',
+          style: TextStyle(
+            color: Color(0xFF8E8E93),
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
@@ -197,231 +319,6 @@ class _RecentSearchRow extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _KeyboardMock extends StatelessWidget {
-  const _KeyboardMock();
-
-  static const List<String> _topRow = [
-    'Q',
-    'W',
-    'E',
-    'R',
-    'T',
-    'Y',
-    'U',
-    'I',
-    'O',
-    'P',
-  ];
-  static const List<String> _middleRow = [
-    'A',
-    'S',
-    'D',
-    'F',
-    'G',
-    'H',
-    'J',
-    'K',
-    'L',
-  ];
-  static const List<String> _bottomRow = ['Z', 'X', 'C', 'V', 'B', 'N', 'M'];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 293,
-      width: double.infinity,
-      color: const Color(0xFFD4D6DD),
-      padding: const EdgeInsets.fromLTRB(3, 8, 3, 16),
-      child: Column(
-        children: [
-          _KeyboardRow(keys: _topRow),
-          const SizedBox(height: 11),
-          _KeyboardRow(keys: _middleRow, horizontalPadding: 19),
-          const SizedBox(height: 11),
-          Row(
-            children: [
-              const _KeyboardActionKey(
-                width: 42,
-                height: 43,
-                backgroundColor: Colors.white,
-                child: Icon(Icons.arrow_upward_rounded, size: 22),
-              ),
-              const SizedBox(width: 6),
-              Expanded(child: _KeyboardRow(keys: _bottomRow, compact: true)),
-              const SizedBox(width: 6),
-              const _KeyboardActionKey(
-                width: 42,
-                height: 42,
-                backgroundColor: Color(0xFFC5C6CC),
-                child: Icon(Icons.backspace_outlined, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const _KeyboardActionKey(
-                width: 87,
-                height: 43,
-                backgroundColor: Color(0xFFC5C6CC),
-                text: '123',
-              ),
-              const SizedBox(width: 6),
-              const _KeyboardActionKey(
-                width: 42,
-                height: 42,
-                backgroundColor: Color(0xFFD4D6DD),
-                child: Icon(Icons.sentiment_satisfied_alt_outlined, size: 22),
-              ),
-              const SizedBox(width: 6),
-              const Expanded(
-                child: _KeyboardActionKey(
-                  width: double.infinity,
-                  height: 43,
-                  backgroundColor: Colors.white,
-                  text: 'space',
-                ),
-              ),
-              const SizedBox(width: 6),
-              const _KeyboardActionKey(
-                width: 42,
-                height: 42,
-                backgroundColor: Color(0xFFD4D6DD),
-                child: Icon(Icons.mic_none_rounded, size: 22),
-              ),
-              const SizedBox(width: 6),
-              const _KeyboardActionKey(
-                width: 87,
-                height: 43,
-                backgroundColor: Color(0xFF285F98),
-                text: 'return',
-                textColor: Colors.white,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KeyboardRow extends StatelessWidget {
-  const _KeyboardRow({
-    required this.keys,
-    this.horizontalPadding = 0,
-    this.compact = false,
-  });
-
-  final List<String> keys;
-  final double horizontalPadding;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      child: Row(
-        children: keys
-            .map(
-              (key) => Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: _KeyboardLetterKey(
-                    label: key,
-                    fontSize: compact ? 22 : 24,
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-}
-
-class _KeyboardLetterKey extends StatelessWidget {
-  const _KeyboardLetterKey({required this.label, required this.fontSize});
-
-  final String label;
-  final double fontSize;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 43,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(5),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x4D000000),
-            blurRadius: 0,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: const Color(0xFF1F2024),
-          fontSize: fontSize,
-          fontWeight: FontWeight.w300,
-        ),
-      ),
-    );
-  }
-}
-
-class _KeyboardActionKey extends StatelessWidget {
-  const _KeyboardActionKey({
-    required this.width,
-    required this.height,
-    required this.backgroundColor,
-    this.child,
-    this.text,
-    this.textColor = const Color(0xFF1F2024),
-  });
-
-  final double width;
-  final double height;
-  final Color backgroundColor;
-  final Widget? child;
-  final String? text;
-  final Color textColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(5),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x4D000000),
-            blurRadius: 0,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      alignment: Alignment.center,
-      child:
-          child ??
-          Text(
-            text ?? '',
-            style: TextStyle(
-              color: textColor,
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-              letterSpacing: -0.32,
-            ),
-          ),
     );
   }
 }

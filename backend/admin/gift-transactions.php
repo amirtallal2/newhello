@@ -27,9 +27,12 @@ admin_render_header('سجل الهدايا', 'gift-transactions');
                 <th>#</th>
                 <th>المرسل</th>
                 <th>الغرفة</th>
+                <th>المستقبل</th>
                 <th>الهدية</th>
                 <th>الكمية</th>
                 <th>الإجمالي</th>
+                <th>ربح المستقبل</th>
+                <th>عمولتك</th>
                 <th>الوجهة</th>
                 <th>الوقت</th>
             </tr>
@@ -40,9 +43,12 @@ admin_render_header('سجل الهدايا', 'gift-transactions');
                 <td>#<?= (int) $transaction['id'] ?></td>
                 <td><?= htmlspecialchars((string) $transaction['sender_name']) ?></td>
                 <td><?= htmlspecialchars((string) $transaction['room_title']) ?></td>
+                <td><?= htmlspecialchars((string) ($transaction['recipient_name_snapshot'] ?? '')) ?></td>
                 <td><?= htmlspecialchars((string) $transaction['gift_name_snapshot']) ?></td>
                 <td><?= (int) $transaction['quantity'] ?></td>
                 <td><?= (int) $transaction['total_price_coins'] ?> Coin</td>
+                <td><?= (int) ($transaction['creator_earning_diamonds'] ?? 0) ?> Diamond</td>
+                <td><?= (int) ($transaction['platform_fee_coins'] ?? 0) ?> Coin</td>
                 <td>
                     <?= $transaction['recipient_mode'] === 'selected_user'
                         ? 'مستخدم محدد' . ($transaction['recipient_slot'] ? ' #' . (int) $transaction['recipient_slot'] : '')

@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+
+import '../../../../core/layout/responsive.dart';
 
 typedef AuthSubmitCallback =
     Future<void> Function(
@@ -98,15 +102,18 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
       backgroundColor: const Color(0xFFFEFEFE),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final width = constraints.maxWidth;
+          final metrics = ResponsiveMetrics.of(context);
+          final width = math.min(constraints.maxWidth, 430.0);
           final height = constraints.maxHeight;
 
           return SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: height),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: ResponsiveContent(
+              maxWidth: 430,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: height),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   SizedBox(height: height * (55 / 812)),
                   Padding(
                     padding: EdgeInsets.symmetric(
@@ -133,9 +140,9 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
                     ),
                     child: Text(
                       widget.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AuthCredentialsScreen.primaryBlue,
-                        fontSize: 25,
+                        fontSize: metrics.font(25, min: 22, max: 28),
                         fontWeight: FontWeight.w600,
                         height: 1.2,
                       ),
@@ -149,14 +156,17 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
                       widget.subtitle,
                       style: TextStyle(
                         color: AuthCredentialsScreen.mutedText,
-                        fontSize: 12,
+                        fontSize: metrics.font(12, min: 11, max: 13),
                         fontWeight: FontWeight.w500,
                         height: widget.subtitleLineHeight,
                       ),
                     ),
                   ),
                   SizedBox(height: height * widget.firstFieldTopSpacingFactor),
-                  _FieldLabel(widget.primaryFieldLabel),
+                  _FieldLabel(
+                    widget.primaryFieldLabel,
+                    fontSize: metrics.font(12, min: 11, max: 13),
+                  ),
                   SizedBox(height: height * (2 / 812)),
                   Padding(
                     padding: EdgeInsets.symmetric(
@@ -171,7 +181,10 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
                     ),
                   ),
                   SizedBox(height: height * (10 / 812)),
-                  const _FieldLabel('Password'),
+                  _FieldLabel(
+                    'Password',
+                    fontSize: metrics.font(12, min: 11, max: 13),
+                  ),
                   SizedBox(height: height * (2 / 812)),
                   Padding(
                     padding: EdgeInsets.symmetric(
@@ -244,14 +257,15 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
                   ),
                   SizedBox(height: height * (5 / 812)),
                   Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
                           widget.footerPrefixText,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AuthCredentialsScreen.secondaryText,
-                            fontSize: 12,
+                            fontSize: metrics.font(12, min: 11, max: 13),
                             fontWeight: FontWeight.w600,
                             height: 2.5,
                           ),
@@ -264,9 +278,9 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
                           },
                           child: Text(
                             widget.footerActionText,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AuthCredentialsScreen.primaryBlue,
-                              fontSize: 12,
+                              fontSize: metrics.font(12, min: 11, max: 13),
                               fontWeight: FontWeight.w600,
                               height: 2.5,
                             ),
@@ -290,8 +304,8 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           padding: EdgeInsets.zero,
-                          textStyle: const TextStyle(
-                            fontSize: 12,
+                          textStyle: TextStyle(
+                            fontSize: metrics.font(12, min: 11, max: 13),
                             fontWeight: FontWeight.w600,
                             height: 2.5,
                           ),
@@ -310,7 +324,8 @@ class _AuthCredentialsScreenState extends State<AuthCredentialsScreen> {
                     ),
                   ),
                   SizedBox(height: height * (100 / 812)),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -403,9 +418,10 @@ class _BackBubbleButton extends StatelessWidget {
 }
 
 class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.label);
+  const _FieldLabel(this.label, {required this.fontSize});
 
   final String label;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -413,9 +429,9 @@ class _FieldLabel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.black,
-          fontSize: 12,
+          fontSize: fontSize,
           fontWeight: FontWeight.w500,
           height: 2.5,
         ),
@@ -445,8 +461,10 @@ class _AuthInputField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Container(
-      height: 48,
+      height: metrics.spacing(48, min: 46, max: 52),
       decoration: BoxDecoration(
         color: AuthCredentialsScreen.fieldBackground,
         borderRadius: BorderRadius.circular(10),
@@ -471,16 +489,16 @@ class _AuthInputField extends StatelessWidget {
                     hintText: '',
                   ).copyWith(
                     hintText: hint,
-                    hintStyle: const TextStyle(
+                    hintStyle: TextStyle(
                       color: AuthCredentialsScreen.hintText,
-                      fontSize: 10,
+                      fontSize: metrics.font(10, min: 10, max: 11),
                       fontWeight: FontWeight.w500,
                       height: 3,
                     ),
                   ),
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.black,
-                fontSize: 10,
+                fontSize: metrics.font(10, min: 10, max: 11),
                 fontWeight: FontWeight.w500,
                 height: 3,
               ),
@@ -514,37 +532,16 @@ class _InlineOptionsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: onToggleChecked,
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            children: [
-              _CheckboxBox(isSelected: isChecked),
-              const SizedBox(width: 10),
-              if (checkboxPrefixText != null || checkboxActionText != null)
-                _AgreementText(
-                  prefixText: checkboxPrefixText ?? '',
-                  actionText: checkboxActionText ?? '',
-                  onTapAction: onTapCheckboxAction,
-                )
-              else
-                const Text(
-                  'Remember me',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w500,
-                    height: 3.75,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const Spacer(),
-        if (inlineActionText != null)
-          TextButton(
+    final metrics = ResponsiveMetrics.of(context);
+    final optionLabel = TextStyle(
+      color: Colors.black,
+      fontSize: metrics.font(8, min: 8, max: 9),
+      fontWeight: FontWeight.w500,
+      height: 3.2,
+    );
+    final inlineAction = inlineActionText == null
+        ? null
+        : TextButton(
             onPressed: onTapInlineAction,
             style: TextButton.styleFrom(
               foregroundColor: AuthCredentialsScreen.primaryBlue,
@@ -554,13 +551,53 @@ class _InlineOptionsRow extends StatelessWidget {
             ),
             child: Text(
               inlineActionText!,
-              style: const TextStyle(
-                fontSize: 8,
+              style: TextStyle(
+                fontSize: metrics.font(8, min: 8, max: 9),
                 fontWeight: FontWeight.w500,
-                height: 3.75,
+                height: 3.2,
               ),
             ),
+          );
+
+    final agreementRow = GestureDetector(
+      onTap: onToggleChecked,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _CheckboxBox(isSelected: isChecked),
+          const SizedBox(width: 10),
+          Flexible(
+            child: checkboxPrefixText != null || checkboxActionText != null
+                ? _AgreementText(
+                    prefixText: checkboxPrefixText ?? '',
+                    actionText: checkboxActionText ?? '',
+                    onTapAction: onTapCheckboxAction,
+                  )
+                : Text('Remember me', style: optionLabel),
           ),
+        ],
+      ),
+    );
+
+    if (metrics.isCompactWidth && inlineAction != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          agreementRow,
+          const SizedBox(height: 4),
+          Align(alignment: Alignment.centerRight, child: inlineAction),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(child: agreementRow),
+        if (inlineAction != null) ...[
+          const SizedBox(width: 8),
+          inlineAction,
+        ],
       ],
     );
   }
@@ -579,28 +616,30 @@ class _AgreementText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 0,
       children: [
         Text(
           prefixText,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.black,
-            fontSize: 8,
+            fontSize: metrics.font(8, min: 8, max: 9),
             fontWeight: FontWeight.w500,
-            height: 3.75,
+            height: 3.2,
           ),
         ),
         GestureDetector(
           onTap: onTapAction,
           child: Text(
             actionText,
-            style: const TextStyle(
+            style: TextStyle(
               color: AuthCredentialsScreen.primaryBlue,
-              fontSize: 8,
+              fontSize: metrics.font(8, min: 8, max: 9),
               fontWeight: FontWeight.w500,
-              height: 3.75,
+              height: 3.2,
             ),
           ),
         ),

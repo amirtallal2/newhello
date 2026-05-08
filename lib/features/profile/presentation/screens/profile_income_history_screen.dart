@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/profile_economy_repository.dart';
 import '../../../home/presentation/widgets/main_bottom_navigation.dart';
 
 class ProfileIncomeHistoryScreen extends StatefulWidget {
@@ -23,22 +24,48 @@ class _ProfileIncomeHistoryScreenState
     'المرود',
   ];
 
+  final ProfileEconomyRepository _economyRepository =
+      ProfileEconomyRepository.instance;
+
   String _selectedFilter = 'الكل';
   _HistoryWalletType _selectedWalletType = _HistoryWalletType.coins;
+  EconomyWalletData _wallet = const EconomyWalletData(
+    coinsBalance: 0,
+    diamondsBalance: 0,
+  );
+  List<WalletRecordData> _entries = const <WalletRecordData>[];
 
-  List<_HistoryEntry> get _entries {
-    final entryTitle = _selectedWalletType == _HistoryWalletType.coins
-        ? 'تبادل الحبوب الي كوينز'
-        : 'تبادل الحبوب الي الماس';
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
 
-    return List<_HistoryEntry>.generate(
-      7,
-      (_) => _HistoryEntry(amount: '+200', title: entryTitle),
-    );
+  Future<void> _loadHistory() async {
+    final walletType = _selectedWalletType == _HistoryWalletType.coins
+        ? 'coins'
+        : 'diamonds';
+
+    try {
+      final payload = await _economyRepository.loadHistory(
+        walletType: walletType,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _wallet = payload.wallet;
+        _entries = payload.records;
+      });
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
+    final balance = _selectedWalletType == _HistoryWalletType.coins
+        ? _wallet.coinsBalance
+        : _wallet.diamondsBalance;
+
     return Scaffold(
       backgroundColor: _background,
       body: SafeArea(
@@ -100,9 +127,9 @@ class _ProfileIncomeHistoryScreenState
                       padding: const EdgeInsets.fromLTRB(16, 8, 25, 14),
                       child: Row(
                         children: [
-                          const Text(
-                            'الدخل: 2548',
-                            style: TextStyle(
+                          Text(
+                            'الدخل: $balance',
+                            style: const TextStyle(
                               color: _primaryBlue,
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
@@ -120,6 +147,7 @@ class _ProfileIncomeHistoryScreenState
                                 _selectedWalletType =
                                     _HistoryWalletType.diamonds;
                               });
+                              _loadHistory();
                             },
                           ),
                           const SizedBox(width: 18),
@@ -132,6 +160,7 @@ class _ProfileIncomeHistoryScreenState
                               setState(() {
                                 _selectedWalletType = _HistoryWalletType.coins;
                               });
+                              _loadHistory();
                             },
                           ),
                         ],
@@ -197,69 +226,105 @@ class _ProfileIncomeHistoryScreenState
                       ),
                     ),
                     Expanded(
-                      child: ListView.separated(
-                        itemCount: _entries.length,
-                        separatorBuilder: (context, index) => const Divider(
-                          height: 2,
-                          thickness: 2,
-                          color: _background,
-                        ),
-                        itemBuilder: (context, index) {
-                          final entry = _entries[index];
-                          return Container(
-                            color: Colors.white,
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                            child: Row(
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: const [
-                                    Text(
-                                      '20/10/2024',
-                                      style: TextStyle(
-                                        color: _primaryBlue,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
+                      child: RefreshIndicator(
+                        color: _primaryBlue,
+                        onRefresh: _loadHistory,
+                        child: _entries.isEmpty
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: const [
+                                  SizedBox(
+                                    height: 260,
+                                    child: Center(
+                                      child: Text(
+                                        'لا توجد عمليات حتى الآن',
+                                        style: TextStyle(
+                                          color: _primaryBlue,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      '10:55',
-                                      style: TextStyle(
-                                        color: _primaryBlue,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                  ),
+                                ],
+                              )
+                            : ListView.separated(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                itemCount: _entries.length,
+                                separatorBuilder: (context, index) =>
+                                    const Divider(
+                                      height: 2,
+                                      thickness: 2,
+                                      color: _background,
                                     ),
-                                  ],
-                                ),
-                                const Spacer(),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      entry.amount,
-                                      style: const TextStyle(
-                                        color: _primaryBlue,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                itemBuilder: (context, index) {
+                                  final entry = _entries[index];
+                                  final amountPrefix =
+                                      entry.direction == 'debit' ? '-' : '+';
+                                  return Container(
+                                    color: Colors.white,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      12,
+                                      16,
+                                      12,
                                     ),
-                                    const SizedBox(height: 5),
-                                    Text(
-                                      entry.title,
-                                      style: const TextStyle(
-                                        color: _primaryBlue,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                    child: Row(
+                                      children: [
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              entry.dateLabel,
+                                              style: const TextStyle(
+                                                color: _primaryBlue,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              entry.timeLabel,
+                                              style: const TextStyle(
+                                                color: _primaryBlue,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const Spacer(),
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              '$amountPrefix${entry.amount}',
+                                              style: const TextStyle(
+                                                color: _primaryBlue,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 5),
+                                            Text(
+                                              entry.subtitle.isEmpty
+                                                  ? entry.title
+                                                  : entry.subtitle,
+                                              style: const TextStyle(
+                                                color: _primaryBlue,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                                  );
+                                },
+                              ),
                       ),
                     ),
                   ],
@@ -274,13 +339,6 @@ class _ProfileIncomeHistoryScreenState
       ),
     );
   }
-}
-
-class _HistoryEntry {
-  const _HistoryEntry({required this.amount, required this.title});
-
-  final String amount;
-  final String title;
 }
 
 class _HistoryWalletToggle extends StatelessWidget {

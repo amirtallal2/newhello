@@ -1,24 +1,50 @@
 import 'package:flutter/material.dart';
 
+import '../../data/profile_economy_repository.dart';
 import '../../../home/presentation/widgets/main_bottom_navigation.dart';
 
-class ProfileWalletRecordsScreen extends StatelessWidget {
+class ProfileWalletRecordsScreen extends StatefulWidget {
   const ProfileWalletRecordsScreen({super.key});
 
+  @override
+  State<ProfileWalletRecordsScreen> createState() =>
+      _ProfileWalletRecordsScreenState();
+}
+
+class _ProfileWalletRecordsScreenState
+    extends State<ProfileWalletRecordsScreen> {
   static const Color _primaryBlue = Color(0xFF285F98);
   static const Color _surfaceGrey = Color(0xFFF4F4F4);
   static const Color _successGreen = Color(0xFF34A853);
   static const Color _errorRed = Color(0xFFEA4335);
 
-  static const List<_WalletRecordItemData> _records = [
-    _WalletRecordItemData(isSuccess: true),
-    _WalletRecordItemData(isSuccess: true),
-    _WalletRecordItemData(isSuccess: false),
-    _WalletRecordItemData(isSuccess: true),
-    _WalletRecordItemData(isSuccess: false),
-    _WalletRecordItemData(isSuccess: false),
-    _WalletRecordItemData(isSuccess: true),
-  ];
+  final ProfileEconomyRepository _economyRepository =
+      ProfileEconomyRepository.instance;
+
+  EconomyWalletData _wallet = const EconomyWalletData(
+    coinsBalance: 500,
+    diamondsBalance: 5,
+  );
+  List<WalletRecordData> _records = const <WalletRecordData>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecords();
+  }
+
+  Future<void> _loadRecords() async {
+    try {
+      final payload = await _economyRepository.loadWalletRecords();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _wallet = payload.wallet;
+        _records = payload.records;
+      });
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,75 +102,93 @@ class ProfileWalletRecordsScreen extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                        child: Row(
-                          children: const [
-                            Text(
-                              'عدد العملات المتاحة الان : 500',
-                              style: TextStyle(
-                                color: _primaryBlue,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Spacer(),
-                            Text(
-                              'تحويل المبلغ',
-                              style: TextStyle(
-                                color: _primaryBlue,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        width: double.infinity,
-                        height: 40,
-                        color: _surfaceGrey,
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Text(
-                              'الكل',
-                              style: TextStyle(
-                                color: _primaryBlue,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            SizedBox(
-                              width: 19,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
+                child: RefreshIndicator(
+                  color: _primaryBlue,
+                  onRefresh: _loadRecords,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                          child: Row(
+                            children: [
+                              Text(
+                                'عدد العملات المتاحة الان : ${_wallet.coinsBalance}',
+                                style: TextStyle(
                                   color: _primaryBlue,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(5),
-                                  ),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                child: SizedBox(height: 2),
+                              ),
+                              Spacer(),
+                              Text(
+                                'تحويل المبلغ',
+                                style: TextStyle(
+                                  color: _primaryBlue,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          width: double.infinity,
+                          height: 40,
+                          color: _surfaceGrey,
+                          alignment: Alignment.center,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Text(
+                                'الكل',
+                                style: TextStyle(
+                                  color: _primaryBlue,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              SizedBox(
+                                width: 19,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: _primaryBlue,
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(5),
+                                    ),
+                                  ),
+                                  child: SizedBox(height: 2),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(
+                          height: 2,
+                          thickness: 2,
+                          color: _surfaceGrey,
+                        ),
+                        if (_records.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Text(
+                              'لا توجد عمليات حتى الآن',
+                              style: TextStyle(
+                                color: _primaryBlue,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const Divider(
-                        height: 2,
-                        thickness: 2,
-                        color: _surfaceGrey,
-                      ),
-                      ..._records.map(
-                        (record) => _WalletRecordRow(data: record),
-                      ),
-                    ],
+                          )
+                        else
+                          ..._records.map(
+                            (record) => _WalletRecordRow(data: record),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -162,21 +206,21 @@ class ProfileWalletRecordsScreen extends StatelessWidget {
 class _WalletRecordRow extends StatelessWidget {
   const _WalletRecordRow({required this.data});
 
-  final _WalletRecordItemData data;
+  final WalletRecordData data;
 
   @override
   Widget build(BuildContext context) {
     final accentColor = data.isSuccess
-        ? ProfileWalletRecordsScreen._successGreen
-        : ProfileWalletRecordsScreen._errorRed;
-    final statusText = data.isSuccess ? 'تم الشحن بنجاح' : 'تم الغاء العملية';
+        ? _ProfileWalletRecordsScreenState._successGreen
+        : _ProfileWalletRecordsScreenState._errorRed;
+    final amountPrefix = data.direction == 'debit' ? '-' : '+';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: ProfileWalletRecordsScreen._surfaceGrey,
+            color: _ProfileWalletRecordsScreenState._surfaceGrey,
             width: 2,
           ),
         ),
@@ -186,20 +230,20 @@ class _WalletRecordRow extends StatelessWidget {
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
-                '20/10/2024',
+                data.dateLabel,
                 style: TextStyle(
-                  color: ProfileWalletRecordsScreen._primaryBlue,
+                  color: _ProfileWalletRecordsScreenState._primaryBlue,
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               SizedBox(height: 2),
               Text(
-                '10:55',
+                data.timeLabel,
                 style: TextStyle(
-                  color: ProfileWalletRecordsScreen._primaryBlue,
+                  color: _ProfileWalletRecordsScreenState._primaryBlue,
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
                 ),
@@ -211,7 +255,7 @@ class _WalletRecordRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                statusText,
+                data.title,
                 style: TextStyle(
                   color: accentColor,
                   fontSize: 10,
@@ -225,7 +269,7 @@ class _WalletRecordRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '+200',
+                '$amountPrefix${data.amount}',
                 style: TextStyle(
                   color: accentColor,
                   fontSize: 15,
@@ -234,7 +278,7 @@ class _WalletRecordRow extends StatelessWidget {
               ),
               const SizedBox(height: 5),
               Text(
-                'شحن 200 عملة الان',
+                data.subtitle,
                 style: TextStyle(
                   color: accentColor,
                   fontSize: 10,
@@ -247,10 +291,4 @@ class _WalletRecordRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _WalletRecordItemData {
-  const _WalletRecordItemData({required this.isSuccess});
-
-  final bool isSuccess;
 }

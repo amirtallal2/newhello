@@ -3,6 +3,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../../../core/widgets/resolved_image.dart';
+import '../../data/profile_economy_repository.dart';
+import 'profile_store_send_frame_screen.dart';
 import '../../../home/presentation/widgets/main_bottom_navigation.dart';
 
 class ProfileStoreFramesScreen extends StatefulWidget {
@@ -17,25 +20,37 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
   static const Color _primaryBlue = Color(0xFF285F98);
   static const Color _surfaceGrey = Color(0xFFF4F4F4);
   static const Color _secondaryBlue = Color(0xFF9DB2CE);
+  final ProfileEconomyRepository _economyRepository =
+      ProfileEconomyRepository.instance;
+  List<StoreItemData> _items = const <StoreItemData>[];
 
-  static const List<_FrameStoreItemData> _items = [
-    _FrameStoreItemData(name: 'الاطار القوي'),
-    _FrameStoreItemData(name: 'الاطار القوي'),
-    _FrameStoreItemData(name: 'الاطار القوي'),
-    _FrameStoreItemData(name: 'الاطار القوي'),
-    _FrameStoreItemData(name: 'الاطار القوي'),
-    _FrameStoreItemData(name: 'الاطار القوي'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
 
-  static const List<_PurchaseDurationData> _durations = [
-    _PurchaseDurationData(label: '3 ايام', discount: '10% Off'),
-    _PurchaseDurationData(label: '7 ايام', discount: '22% Off'),
-    _PurchaseDurationData(label: '15 ايام', discount: '27% Off'),
-    _PurchaseDurationData(label: '30 ايام', discount: '27% Off'),
-  ];
+  Future<void> _loadCatalog() async {
+    try {
+      final catalog = await _economyRepository.loadStoreCatalog(
+        categoryKey: 'frames',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _items = catalog.items;
+      });
+    } catch (_) {}
+  }
 
-  Future<void> _showPurchaseDialog(_FrameStoreItemData item) {
-    var selectedDurationIndex = 0;
+  Future<void> _showPurchaseDialog(StoreItemData item) {
+    var selectedDurationIndex = item.durations.indexWhere(
+      (duration) => duration.days == item.defaultDurationDays,
+    );
+    if (selectedDurationIndex < 0) {
+      selectedDurationIndex = 0;
+    }
 
     return showGeneralDialog<void>(
       context: context,
@@ -45,6 +60,8 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final durations = item.durations;
+            final selectedDuration = durations[selectedDurationIndex];
             return Stack(
               children: [
                 Positioned.fill(
@@ -83,10 +100,13 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
                                 children: [
                                   Align(
                                     alignment: Alignment.centerLeft,
-                                    child: Image.asset(
-                                      'assets/images/profile_store_frames_dialog_icon.png',
+                                    child: ResolvedImage(
+                                      path:
+                                          item.dialogIconAssetPath ??
+                                          'assets/images/profile_store_frames_dialog_icon.png',
                                       width: 50,
                                       height: 50,
+                                      fit: BoxFit.contain,
                                       filterQuality: FilterQuality.high,
                                     ),
                                   ),
@@ -102,13 +122,19 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
                               ),
                             ),
                             const SizedBox(height: 14),
-                            const _FramePreviewBox(),
+                            _FramePreviewBox(
+                              overlayPath:
+                                  item.dialogPreviewAssetPath ??
+                                  item.previewAssetPath,
+                            ),
                             const SizedBox(height: 25),
                             Row(
                               children: [
                                 Expanded(
                                   child: _DurationOptionButton(
-                                    data: _durations[2],
+                                    data: _PurchaseDurationData.fromDuration(
+                                      durations[2],
+                                    ),
                                     isSelected: selectedDurationIndex == 2,
                                     onTap: () {
                                       setDialogState(() {
@@ -120,7 +146,9 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _DurationOptionButton(
-                                    data: _durations[1],
+                                    data: _PurchaseDurationData.fromDuration(
+                                      durations[1],
+                                    ),
                                     isSelected: selectedDurationIndex == 1,
                                     onTap: () {
                                       setDialogState(() {
@@ -132,7 +160,9 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _DurationOptionButton(
-                                    data: _durations[0],
+                                    data: _PurchaseDurationData.fromDuration(
+                                      durations[0],
+                                    ),
                                     isSelected: selectedDurationIndex == 0,
                                     onTap: () {
                                       setDialogState(() {
@@ -149,7 +179,9 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
                               child: SizedBox(
                                 width: 84,
                                 child: _DurationOptionButton(
-                                  data: _durations[3],
+                                  data: _PurchaseDurationData.fromDuration(
+                                    durations[3],
+                                  ),
                                   isSelected: selectedDurationIndex == 3,
                                   onTap: () {
                                     setDialogState(() {
@@ -160,9 +192,9 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'الاسعار : 1890',
-                              style: TextStyle(
+                            Text(
+                              'الاسعار : ${selectedDuration.price}',
+                              style: const TextStyle(
                                 color: _primaryBlue,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
@@ -176,8 +208,33 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
                                 key: const ValueKey(
                                   'profile-store-frames-dialog-buy',
                                 ),
-                                onPressed: () {
-                                  Navigator.of(dialogContext).pop();
+                                onPressed: () async {
+                                  final navigator = Navigator.of(dialogContext);
+                                  final messenger = ScaffoldMessenger.of(
+                                    this.context,
+                                  );
+                                  try {
+                                    await _economyRepository.purchaseStoreItem(
+                                      itemId: item.id,
+                                      durationDays: selectedDuration.days,
+                                    );
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    navigator.pop();
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text('تم شراء العنصر بنجاح'),
+                                      ),
+                                    );
+                                  } catch (error) {
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text(error.toString())),
+                                    );
+                                  }
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _primaryBlue,
@@ -264,54 +321,66 @@ class _ProfileStoreFramesScreenState extends State<ProfileStoreFramesScreen> {
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(17, 10, 17, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: EdgeInsets.only(right: 1, bottom: 11),
-                        child: Text(
-                          'جديد',
-                          style: TextStyle(
-                            color: _primaryBlue,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
+              child: RefreshIndicator(
+                color: _primaryBlue,
+                onRefresh: _loadCatalog,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(17, 10, 17, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(right: 1, bottom: 11),
+                          child: Text(
+                            'جديد',
+                            style: TextStyle(
+                              color: _primaryBlue,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        const spacing = 20.0;
-                        final cardWidth = (constraints.maxWidth - spacing) / 2;
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          const spacing = 20.0;
+                          final cardWidth =
+                              (constraints.maxWidth - spacing) / 2;
 
-                        return Wrap(
-                          spacing: spacing,
-                          runSpacing: 20,
-                          children: List.generate(_items.length, (index) {
-                            return SizedBox(
-                              width: cardWidth,
-                              child: _FrameStoreItemCard(
-                                item: _items[index],
-                                index: index,
-                                onGiftTap: () {
-                                  Navigator.of(
-                                    context,
-                                  ).pushNamed(AppRoutes.profileStoreSendFrame);
-                                },
-                                onBuyTap: () {
-                                  _showPurchaseDialog(_items[index]);
-                                },
-                              ),
-                            );
-                          }),
-                        );
-                      },
-                    ),
-                  ],
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: 20,
+                            children: List.generate(_items.length, (index) {
+                              return SizedBox(
+                                width: cardWidth,
+                                child: _FrameStoreItemCard(
+                                  item: _items[index],
+                                  index: index,
+                                  onGiftTap: () {
+                                    Navigator.of(context).pushNamed(
+                                      AppRoutes.profileStoreSendFrame,
+                                      arguments: ProfileStoreSendArgs(
+                                        itemId: _items[index].id,
+                                        itemName: _items[index].name,
+                                        durationDays:
+                                            _items[index].defaultDuration.days,
+                                      ),
+                                    );
+                                  },
+                                  onBuyTap: () {
+                                    _showPurchaseDialog(_items[index]);
+                                  },
+                                ),
+                              );
+                            }),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -333,7 +402,7 @@ class _FrameStoreItemCard extends StatelessWidget {
     required this.onBuyTap,
   });
 
-  final _FrameStoreItemData item;
+  final StoreItemData item;
   final int index;
   final VoidCallback onGiftTap;
   final VoidCallback onBuyTap;
@@ -366,9 +435,9 @@ class _FrameStoreItemCard extends StatelessWidget {
                 filterQuality: FilterQuality.high,
               ),
               const SizedBox(width: 9),
-              const Text(
-                '7 أيام',
-                style: TextStyle(
+              Text(
+                '${item.defaultDuration.days} أيام',
+                style: const TextStyle(
                   color: _ProfileStoreFramesScreenState._primaryBlue,
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
@@ -377,7 +446,7 @@ class _FrameStoreItemCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 5),
-          const _FramePreviewBox(),
+          _FramePreviewBox(overlayPath: item.previewAssetPath),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -407,7 +476,9 @@ class _FrameStoreItemCard extends StatelessWidget {
 }
 
 class _FramePreviewBox extends StatelessWidget {
-  const _FramePreviewBox();
+  const _FramePreviewBox({required this.overlayPath});
+
+  final String overlayPath;
 
   @override
   Widget build(BuildContext context) {
@@ -430,8 +501,8 @@ class _FramePreviewBox extends StatelessWidget {
             ),
           ),
           Positioned.fill(
-            child: Image.asset(
-              'assets/images/profile_store_frames_preview_overlay.png',
+            child: ResolvedImage(
+              path: overlayPath,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.high,
             ),
@@ -570,15 +641,16 @@ class _FrameStoreActionButton extends StatelessWidget {
   }
 }
 
-class _FrameStoreItemData {
-  const _FrameStoreItemData({required this.name});
-
-  final String name;
-}
-
 class _PurchaseDurationData {
   const _PurchaseDurationData({required this.label, required this.discount});
 
   final String label;
   final String discount;
+
+  factory _PurchaseDurationData.fromDuration(StoreDurationOptionData duration) {
+    return _PurchaseDurationData(
+      label: '${duration.days} ايام',
+      discount: duration.discount,
+    );
+  }
 }

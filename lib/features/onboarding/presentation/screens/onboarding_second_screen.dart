@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../../../core/storage/app_launch_store.dart';
 import '../widgets/onboarding_screen_layout.dart';
 
 class OnboardingSecondScreen extends StatelessWidget {
@@ -28,7 +29,12 @@ class OnboardingSecondScreen extends StatelessWidget {
         );
       },
       onSkip: () {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.bootstrap);
+        AppLaunchStore.instance.markOnboardingSeen().then((_) {
+          if (!context.mounted) {
+            return;
+          }
+          Navigator.of(context).pushReplacementNamed(AppRoutes.authEntry);
+        });
       },
       onContinue: () {
         Navigator.of(context).pushNamed(AppRoutes.onboardingThird);

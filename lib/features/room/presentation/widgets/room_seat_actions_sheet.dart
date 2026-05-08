@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../../../core/layout/responsive.dart';
 import '../controllers/room_session_controller.dart';
 import 'room_request_mic_sheet.dart';
 
@@ -83,6 +84,8 @@ class _RoomSeatActionsDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -101,47 +104,59 @@ class _RoomSeatActionsDialog extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(25),
               ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 433,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 10),
-                    ..._actions.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final action = entry.value;
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: metrics.sheetMaxHeight(0.72, minHeight: 360),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Column(
+                    children: [
+                      SizedBox(height: metrics.spacing(10, min: 8, max: 12)),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            children: [
+                              ..._actions.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final action = entry.value;
 
-                      return Column(
-                        children: [
-                          _SeatActionRow(
-                            action: action,
-                            onTap: () {
-                              Navigator.of(context).pop();
-                              Navigator.of(
-                                rootContext,
-                              ).pushNamed(AppRoutes.bootstrap);
-                            },
+                                return Column(
+                                  children: [
+                                    _SeatActionRow(
+                                      action: action,
+                                      onTap: () {
+                                        Navigator.of(context).pop();
+                                        Navigator.of(
+                                          rootContext,
+                                        ).pushNamed(AppRoutes.bootstrap);
+                                      },
+                                    ),
+                                    if (index != _actions.length - 1)
+                                      const Divider(
+                                        height: 2,
+                                        thickness: 2,
+                                        color: Color(0xFFEBEBEB),
+                                        indent: 20,
+                                        endIndent: 20,
+                                      ),
+                                  ],
+                                );
+                              }),
+                            ],
                           ),
-                          if (index != _actions.length - 1)
-                            const Divider(
-                              height: 2,
-                              thickness: 2,
-                              color: Color(0xFFEBEBEB),
-                              indent: 20,
-                              endIndent: 20,
-                            ),
-                        ],
-                      );
-                    }),
-                    const Divider(
-                      height: 2,
-                      thickness: 2,
-                      color: Color(0xFFEBEBEB),
-                      indent: 20,
-                      endIndent: 20,
-                    ),
-                    _SeatCancelRow(onTap: () => Navigator.of(context).pop()),
-                  ],
+                        ),
+                      ),
+                      const Divider(
+                        height: 2,
+                        thickness: 2,
+                        color: Color(0xFFEBEBEB),
+                        indent: 20,
+                        endIndent: 20,
+                      ),
+                      _SeatCancelRow(onTap: () => Navigator.of(context).pop()),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -165,6 +180,8 @@ class _RoomMemberSeatActionsDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -180,7 +197,9 @@ class _RoomMemberSeatActionsDialog extends StatelessWidget {
             color: Colors.transparent,
             child: Container(
               width: double.infinity,
-              height: 321,
+              constraints: BoxConstraints(
+                minHeight: metrics.sheetMaxHeight(0.40, minHeight: 290),
+              ),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -195,7 +214,12 @@ class _RoomMemberSeatActionsDialog extends StatelessWidget {
                 top: false,
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 61, 18, 22),
+                  padding: EdgeInsets.fromLTRB(
+                    metrics.pageHorizontalPadding(),
+                    metrics.spacing(61, min: 42, max: 61),
+                    metrics.pageHorizontalPadding(),
+                    metrics.spacing(22, min: 16, max: 22),
+                  ),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -212,7 +236,9 @@ class _RoomMemberSeatActionsDialog extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 35),
+                        SizedBox(
+                          height: metrics.spacing(35, min: 20, max: 35),
+                        ),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -276,7 +302,9 @@ class _RoomMemberSeatActionsDialog extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(
+                          height: metrics.spacing(24, min: 16, max: 24),
+                        ),
                         Align(
                           alignment: Alignment.centerRight,
                           child: _MemberRequestMicCard(
@@ -299,7 +327,9 @@ class _RoomMemberSeatActionsDialog extends StatelessWidget {
                             },
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: metrics.spacing(10, min: 8, max: 12),
+                        ),
                       ],
                     ),
                   ),
@@ -321,33 +351,35 @@ class _SeatActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Semantics(
       label: action.semanticLabel,
       button: true,
       child: InkWell(
         onTap: onTap,
         child: SizedBox(
-          height: 56,
+          height: metrics.spacing(56, min: 52, max: 58),
           child: Stack(
             children: [
               Center(
                 child: Text(
                   action.label,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.black,
-                    fontSize: 12,
+                    fontSize: metrics.font(12, min: 11, max: 13),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
               PositionedDirectional(
-                end: 112,
-                top: 13,
+                end: metrics.spacing(96, min: 56, max: 112),
+                top: metrics.spacing(13, min: 12, max: 14),
                 child: Image.asset(
                   action.assetPath,
-                  width: 30,
-                  height: 30,
+                  width: metrics.spacing(30, min: 26, max: 32),
+                  height: metrics.spacing(30, min: 26, max: 32),
                   filterQuality: FilterQuality.high,
                 ),
               ),
@@ -366,19 +398,21 @@ class _SeatCancelRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Semantics(
       label: 'seat-action-cancel',
       button: true,
       child: InkWell(
         onTap: onTap,
-        child: const SizedBox(
-          height: 71,
+        child: SizedBox(
+          height: metrics.spacing(71, min: 60, max: 72),
           child: Center(
             child: Text(
               'الغاء',
               style: TextStyle(
                 color: Colors.black,
-                fontSize: 12,
+                fontSize: metrics.font(12, min: 11, max: 13),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -418,6 +452,8 @@ class _MemberSeatActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Semantics(
       container: true,
       label: semanticLabel,
@@ -427,13 +463,13 @@ class _MemberSeatActionButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: SizedBox(
-            width: 60,
+            width: metrics.spacing(60, min: 56, max: 66),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: metrics.spacing(60, min: 56, max: 66),
+                  height: metrics.spacing(60, min: 56, max: 66),
                   decoration: const BoxDecoration(
                     color: Color(0x809DB2CE),
                     shape: BoxShape.circle,
@@ -442,19 +478,19 @@ class _MemberSeatActionButton extends StatelessWidget {
                   child: assetPath != null
                       ? Image.asset(
                           assetPath!,
-                          width: 30,
-                          height: 30,
+                          width: metrics.spacing(30, min: 26, max: 34),
+                          height: metrics.spacing(30, min: 26, max: 34),
                           filterQuality: FilterQuality.high,
                         )
                       : icon,
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: metrics.spacing(10, min: 8, max: 12)),
                 Text(
                   label,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
-                    fontSize: 10,
+                    fontSize: metrics.font(10, min: 9, max: 11),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -475,6 +511,8 @@ class _MemberRequestMicCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metrics = ResponsiveMetrics.of(context);
+
     return Semantics(
       container: true,
       label: 'seat-action-request-mic',
@@ -490,8 +528,8 @@ class _MemberRequestMicCard extends StatelessWidget {
                 clipBehavior: Clip.none,
                 children: [
                   Container(
-                    width: 60,
-                    height: 60,
+                    width: metrics.spacing(60, min: 56, max: 66),
+                    height: metrics.spacing(60, min: 56, max: 66),
                     decoration: const BoxDecoration(
                       color: Color(0x809DB2CE),
                       shape: BoxShape.circle,
@@ -505,18 +543,18 @@ class _MemberRequestMicCard extends StatelessWidget {
                     right: 0,
                     bottom: 0,
                     child: Container(
-                      width: 16,
-                      height: 16,
+                      width: metrics.spacing(16, min: 14, max: 18),
+                      height: metrics.spacing(16, min: 14, max: 18),
                       decoration: const BoxDecoration(
                         color: _RoomMemberSeatActionsDialog._primaryBlue,
                         shape: BoxShape.circle,
                       ),
                       alignment: Alignment.center,
-                      child: const Text(
+                      child: Text(
                         '+',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 13,
+                          fontSize: metrics.font(13, min: 11, max: 14),
                           fontWeight: FontWeight.w600,
                         ),
                       ),

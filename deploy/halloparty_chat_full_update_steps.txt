@@ -1,0 +1,30 @@
+تحديث الشات الكامل - Hallo Party
+
+1) تحديث الباك اند:
+- ارفع الملف: deploy/halloparty_chat_full_backend_update.zip
+- فك الضغط داخل مسار الموقع الذي يحتوي مجلد backend.
+- الملفات التي سيتم تحديثها:
+  backend/api/index.php
+  backend/src/ChatService.php
+  backend/admin/chat-thread.php
+
+2) تحديث قاعدة البيانات:
+- افتح aaPanel > Databases > phpMyAdmin أو Import SQL.
+- اختار قاعدة بيانات التطبيق.
+- شغل الملف: deploy/halloparty_chat_full_database_update.sql
+- هذا التحديث يضيف أعمدة المرفقات لرسائل الشات:
+  attachment_path
+  attachment_mime_type
+  attachment_name
+
+3) تحديث التطبيق:
+- ثبت APK الاختبار:
+  deploy/halloparty_chat_full_debug.apk
+
+4) اختبار سريع بعد الرفع:
+- افتح التطبيق > الدردشة.
+- جرب تبويب رسالة، الأصدقاء، اكتشف.
+- افتح محادثة وجرب: إرسال نص، صورة، هدية، رسالة صوتية، نسخ بيانات المحادثة، حذف المحادثة، وتحديدها كمقروءة.
+- من الأدمن افتح:
+  https://halloparty.online/admin/chat-threads.php
+  ثم افتح أي محادثة وتأكد أن الرسائل والمرفقات تظهر في التفاصيل.

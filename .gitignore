@@ -37,6 +37,14 @@ migrate_working_dir/
 /coverage/
 backend/database/*.sqlite
 backend/database/*.sqlite3
+backend/config/runtime.php
+backend/storage/cache/*
+backend/storage/gifts/*
+backend/storage/posts/*
+backend/storage/support/*
+!backend/storage/gifts/.gitignore
+!backend/storage/support/.gitignore
+deploy/*.apk
 
 # Symbolication related
 app.*.symbols
